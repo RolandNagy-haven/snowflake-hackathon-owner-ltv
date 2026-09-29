@@ -1,0 +1,12 @@
+# Performance Marketing team's test instance of the shared owner view memory: same brief, rules, tools and organiser as
+# shared_owner_view.yaml, in the team's own schema. The team has full permissions on the schema and may
+# truncate the MEM_* data tables to start fresh (never MEM_TOPIC; redeploy with memctl if objects are dropped).
+# Deploy:  .venv/bin/python topic-memory/memctl.py deploy topics/shared_owner_view_performance_marketing.yaml
+extends: shared_owner_view.yaml
+
+topic:
+  id_prefix: SOP            # SOP-00001...: distinct from the shared instance's SOV-... ids
+
+deployment:
+  schema: SHARED_OWNER_VIEW_MEMORY_PERFORMANCE_MARKETING
+  client_name: mem-shared-owner-view-memory-performance-marketing

@@ -1,0 +1,25 @@
+-- {{ t.name }} ({{ t.id }}): organiser triggers.
+--   {{ n.organise_task }}: triggered by new rows in MEM_ITEM (this topic's stream) -> MEM_ORGANISE (pipeline triage)
+--   {{ n.review_task }}: cron -> MEM_REVIEW (leftover triage + organiser agent review)
+-- The stream sees inserts of every topic; MEM_ORGANISE only picks this topic's 'new' items.
+
+CREATE STREAM IF NOT EXISTS {{ fq }}.{{ n.stream }} ON TABLE {{ fq }}.MEM_ITEM APPEND_ONLY = TRUE
+  COMMENT = 'topic-memory {{ t.id }}: triggers {{ n.organise_task }}';
+
+ALTER TASK IF EXISTS {{ fq }}.{{ n.organise_task }} SUSPEND;
+CREATE OR REPLACE TASK {{ fq }}.{{ n.organise_task }}
+  WAREHOUSE = {{ t.warehouse }}
+  USER_TASK_TIMEOUT_MS = 900000
+  COMMENT = 'topic-memory {{ t.id }}: organiser triage on insert'
+  WHEN SYSTEM$STREAM_HAS_DATA('{{ fq }}.{{ n.stream }}')
+  AS CALL {{ fq }}.MEM_ORGANISE('{{ t.id }}', 'insert');
+{% if t.organiser.on_insert.enabled %}ALTER TASK {{ fq }}.{{ n.organise_task }} RESUME;{% endif %}
+
+ALTER TASK IF EXISTS {{ fq }}.{{ n.review_task }} SUSPEND;
+CREATE OR REPLACE TASK {{ fq }}.{{ n.review_task }}
+  WAREHOUSE = {{ t.warehouse }}
+  SCHEDULE = {{ t.organiser.cadence.schedule | sqlstr }}
+  USER_TASK_TIMEOUT_MS = {{ (t.organiser.cadence.budget_seconds + 600) * 1000 }}
+  COMMENT = 'topic-memory {{ t.id }}: scheduled organiser review'
+  AS CALL {{ fq }}.MEM_REVIEW('{{ t.id }}');
+{% if t.organiser.cadence.enabled %}ALTER TASK {{ fq }}.{{ n.review_task }} RESUME;{% endif %}

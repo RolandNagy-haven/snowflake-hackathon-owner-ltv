@@ -1,0 +1,72 @@
+-- {{ t.name }} ({{ t.id }}): the organiser agent. Run by MEM_REVIEW on the cadence task (and on demand
+-- via `memctl organise --review`). Per-insert triage does not use it: that is MEM_ORGANISE (pipeline).
+{% macro gtool(name, desc, props, proc) %}
+  - tool_spec:
+      type: generic
+      name: {{ name }}
+      description: {{ desc | tojson }}
+      input_schema:
+        type: object
+        properties:
+{%- for p in props %}
+          {{ p[0] }}:
+            type: {{ p[1] }}
+            description: {{ p[2] | tojson }}
+{%- endfor %}
+        required: {{ props | map(attribute=0) | list | tojson }}
+{%- endmacro %}
+{% macro gres(name, proc) %}
+  {{ name }}:
+    type: procedure
+    identifier: {{ fq }}.{{ proc }}
+    execution_environment:
+      type: warehouse
+      warehouse: {{ t.warehouse }}
+      query_timeout: 120
+{%- endmacro %}
+
+CREATE OR REPLACE AGENT {{ fq }}.{{ n.agent }}
+  COMMENT = {{ ('topic-memory organiser for ' ~ t.id ~ ' v' ~ t.version) | sqlstr }}
+  PROFILE = '{"display_name": "Memory organiser: {{ t.id }} in {{ fq }}", "color": "blue"}'
+  FROM SPECIFICATION
+$$
+models:
+  orchestration: auto
+
+orchestration:
+  budget:
+    seconds: {{ t.organiser.cadence.budget_seconds }}
+    tokens: 300000
+
+instructions:
+  orchestration: {{ t.organiser_instructions | tojson }}
+  response: "Terse: a bullet list of the changes you made (id: action - reason), then one line with anything a human should look at."
+
+tools:
+{{ gtool('index', 'The topic brief and the current index: every active and unreviewed ' ~ t.noun ~ ', one line each, grouped by category. Pass category to see one whole category.',
+         [['category', 'string', "Category to show in full, or '' for all"], ['since', 'string', "'' for the full index, or e.g. 24h for recent changes only"], ['agent_type', 'string', "Always 'organiser'"]], n.index) }}
+{{ gtool('list_items', 'Compact list of ' ~ t.plural ~ ' with body preview, status, contributor and dates.',
+         [['status', 'string', "'' = open items (new, needs_review, active); or one status; or 'all'"], ['category', 'string', "'' = all categories"], ['limit_n', 'number', 'Max rows (1-500)']], n.org_list) }}
+{{ gtool('search', 'Semantic search over the ' ~ t.plural ~ '.',
+         [['query', 'string', 'What to look for'], ['category', 'string', "'' or a category"], ['text_filter', 'string', "'' or exact text that must appear"], ['include_unreviewed', 'boolean', 'Include new / needs_review items'], ['top_k', 'number', 'Max results'], ['agent_type', 'string', "Always 'organiser'"]], n.search) }}
+{{ gtool('get', 'Full ' ~ t.plural ~ ' by id, with attributes, status and links.',
+         [['ids', 'string', 'Comma-separated ids'], ['agent_type', 'string', "Always 'organiser'"]], n.get) }}
+{{ gtool('update_item', 'Rewrite fields of one ' ~ t.noun ~ ". Use '' for every field you leave unchanged. Never add facts that are not in the items.",
+         [['item_id', 'string', 'Id to update'], ['title', 'string', "New index line or ''"], ['body', 'string', "New body or ''"], ['category', 'string', "New category or ''"], ['tags', 'string', "Comma-separated tags (replaces all) or ''"], ['as_of_date', 'string', "YYYY-MM-DD or ''"], ['reason', 'string', 'Why (audit trail)']], n.org_update) }}
+{{ gtool('set_status', 'Change the status of one ' ~ t.noun ~ ': active, needs_review, superseded (related_id = the replacement), merged (related_id = the item it was merged into), rejected, retired.',
+         [['item_id', 'string', 'Id'], ['status', 'string', 'New status'], ['reason', 'string', 'Why (audit trail, shown to readers)'], ['related_id', 'string', "Replacement / merge target id, or ''"]], n.org_set_status) }}
+{{ gtool('link_items', 'Record a relation between two ' ~ t.plural ~ ' (related, contradicts, duplicates, refines).',
+         [['from_id', 'string', 'Id'], ['to_id', 'string', 'Id'], ['relation', 'string', 'related | contradicts | duplicates | refines'], ['reason', 'string', 'Why']], n.org_link) }}
+{{ gtool('write_overview', 'Replace the overview shown at the top of the index (20-4000 chars, markdown, no headings).',
+         [['overview', 'string', 'The overview text']], n.org_overview) }}
+
+tool_resources:
+{{ gres('index', n.index) }}
+{{ gres('list_items', n.org_list) }}
+{{ gres('search', n.search) }}
+{{ gres('get', n.get) }}
+{{ gres('update_item', n.org_update) }}
+{{ gres('set_status', n.org_set_status) }}
+{{ gres('link_items', n.org_link) }}
+{{ gres('write_overview', n.org_overview) }}
+$$;

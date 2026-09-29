@@ -1,0 +1,9 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+# token caches must never be committed
+*session_cache*.json
+mcp_session_*.json
+.test_cache.json

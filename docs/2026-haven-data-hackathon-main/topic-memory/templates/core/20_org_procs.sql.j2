@@ -1,0 +1,180 @@
+{% import "_macros.j2" as m with context -%}
+-- topic-memory core organiser procedures: topic-agnostic (take TOPIC_ID), owner's rights.
+-- Used by the organiser pipeline (MEM_ORGANISE) and, through thin per-topic wrappers, by each
+-- topic's organiser agent. Contributors never get these: they only save.
+-- Convention: '' means "leave unchanged" / "not given". Every change bumps REVISION and writes history.
+
+CREATE OR REPLACE PROCEDURE {{ fq }}.MEM_ORG_UPDATE_ITEM(
+    TOPIC_ID VARCHAR, ITEM_ID VARCHAR, TITLE VARCHAR, BODY VARCHAR, CATEGORY VARCHAR, TAGS VARCHAR,
+    AS_OF_DATE VARCHAR, ACTOR VARCHAR, REASON VARCHAR)
+RETURNS VARIANT
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+DECLARE
+    cfg VARIANT;
+    n NUMBER;
+BEGIN
+    SELECT ANY_VALUE(CONFIG) INTO :cfg FROM {{ fq }}.MEM_TOPIC WHERE TOPIC_ID = :TOPIC_ID;
+    IF (cfg IS NULL) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'unknown topic ' || :TOPIC_ID);
+    END IF;
+    IF (COALESCE(CATEGORY, '') <> '' AND GET(GET_PATH(cfg, 'schema.categories'), LOWER(TRIM(CATEGORY))) IS NULL) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'unknown category ' || CATEGORY,
+                                'categories', OBJECT_KEYS(GET_PATH(cfg, 'schema.categories')));
+    END IF;
+    IF (COALESCE(AS_OF_DATE, '') <> '' AND TRY_TO_DATE(AS_OF_DATE) IS NULL) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'as_of_date must be YYYY-MM-DD');
+    END IF;
+    IF (COALESCE(TITLE, '') = '' AND COALESCE(BODY, '') = '' AND COALESCE(CATEGORY, '') = ''
+        AND COALESCE(TAGS, '') = '' AND COALESCE(AS_OF_DATE, '') = '') THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'nothing to update');
+    END IF;
+
+    UPDATE {{ fq }}.MEM_ITEM
+       SET TITLE      = IFF(COALESCE(:TITLE, '') = '', TITLE, TRIM(:TITLE)),
+           BODY       = IFF(COALESCE(:BODY, '') = '', BODY, TRIM(:BODY)),
+           CATEGORY   = IFF(COALESCE(:CATEGORY, '') = '', CATEGORY, LOWER(TRIM(:CATEGORY))),
+           TAGS       = IFF(COALESCE(:TAGS, '') = '', TAGS, {{ m.csv_array(':TAGS') }}),
+           AS_OF_DATE = IFF(COALESCE(:AS_OF_DATE, '') = '', AS_OF_DATE, TRY_TO_DATE(:AS_OF_DATE)),
+           REVISION   = REVISION + 1,
+           UPDATED_AT = CURRENT_TIMESTAMP(),
+           UPDATED_BY = :ACTOR
+     WHERE TOPIC_ID = :TOPIC_ID AND ITEM_ID = UPPER(TRIM(:ITEM_ID));
+    n := SQLROWCOUNT;
+    IF (n = 0) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'no item ' || :ITEM_ID || ' in topic ' || :TOPIC_ID);
+    END IF;
+    -- re-embed from the updated row
+    UPDATE {{ fq }}.MEM_ITEM
+       SET EMBEDDING = {{ m.embed('EMBED_MODEL', m.embed_text('TITLE', 'CATEGORY', 'TAGS', 'BODY')) }}
+     WHERE TOPIC_ID = :TOPIC_ID AND ITEM_ID = UPPER(TRIM(:ITEM_ID));
+    INSERT INTO {{ fq }}.MEM_ITEM_HISTORY (TOPIC_ID, ITEM_ID, REVISION, ACTOR, OPERATION, REASON, SNAPSHOT)
+        SELECT TOPIC_ID, ITEM_ID, REVISION, :ACTOR, 'update', NULLIF(:REASON, ''), {{ m.snapshot() }}
+          FROM {{ fq }}.MEM_ITEM WHERE TOPIC_ID = :TOPIC_ID AND ITEM_ID = UPPER(TRIM(:ITEM_ID));
+    RETURN OBJECT_CONSTRUCT('ok', TRUE, 'updated', UPPER(TRIM(:ITEM_ID)));
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE {{ fq }}.MEM_ORG_SET_STATUS(
+    TOPIC_ID VARCHAR, ITEM_ID VARCHAR, STATUS VARCHAR, REASON VARCHAR, RELATED_ID VARCHAR, ACTOR VARCHAR)
+RETURNS VARIANT
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+DECLARE
+    st VARCHAR DEFAULT LOWER(TRIM(STATUS));
+    iid VARCHAR DEFAULT UPPER(TRIM(ITEM_ID));
+    rid VARCHAR DEFAULT NULLIF(UPPER(TRIM(COALESCE(RELATED_ID, ''))), '');
+    cur VARCHAR;
+    rel_status VARCHAR;
+BEGIN
+    IF (st NOT IN ('active', 'needs_review', 'superseded', 'merged', 'rejected', 'retired')) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error',
+            'status must be one of active, needs_review, superseded, merged, rejected, retired');
+    END IF;
+    IF (COALESCE(REASON, '') = '') THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'reason is required');
+    END IF;
+    SELECT ANY_VALUE(STATUS) INTO :cur FROM {{ fq }}.MEM_ITEM WHERE TOPIC_ID = :TOPIC_ID AND ITEM_ID = :iid;
+    IF (cur IS NULL) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'no item ' || iid || ' in topic ' || TOPIC_ID);
+    END IF;
+    IF (st IN ('superseded', 'merged')) THEN
+        IF (rid IS NULL OR rid = iid) THEN
+            RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'related_id (the item that replaces this one) is required for ' || st);
+        END IF;
+        SELECT ANY_VALUE(STATUS) INTO :rel_status FROM {{ fq }}.MEM_ITEM WHERE TOPIC_ID = :TOPIC_ID AND ITEM_ID = :rid;
+        IF (rel_status IS NULL OR rel_status NOT IN ('active', 'new', 'needs_review')) THEN
+            RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'related item ' || rid || ' must exist and be active/new (is ' || COALESCE(rel_status, 'missing') || ')');
+        END IF;
+    ELSE
+        rid := NULL;
+    END IF;
+
+    UPDATE {{ fq }}.MEM_ITEM
+       SET STATUS = :st, STATUS_REASON = :REASON, RELATED_ID = :rid,
+           REVISION = REVISION + 1, UPDATED_AT = CURRENT_TIMESTAMP(), UPDATED_BY = :ACTOR,
+           REVIEWED_AT = IFF(STARTSWITH(:ACTOR, 'organiser'), CURRENT_TIMESTAMP(), REVIEWED_AT)
+     WHERE TOPIC_ID = :TOPIC_ID AND ITEM_ID = :iid;
+    IF (rid IS NOT NULL) THEN
+        INSERT INTO {{ fq }}.MEM_LINK (TOPIC_ID, FROM_ID, TO_ID, RELATION, REASON, CREATED_BY)
+            SELECT :TOPIC_ID, :iid, :rid, IFF(:st = 'merged', 'merged_into', 'superseded_by'), :REASON, :ACTOR;
+    END IF;
+    INSERT INTO {{ fq }}.MEM_ITEM_HISTORY (TOPIC_ID, ITEM_ID, REVISION, ACTOR, OPERATION, REASON, SNAPSHOT)
+        SELECT TOPIC_ID, ITEM_ID, REVISION, :ACTOR, 'status:' || :st, :REASON, {{ m.snapshot() }}
+          FROM {{ fq }}.MEM_ITEM WHERE TOPIC_ID = :TOPIC_ID AND ITEM_ID = :iid;
+    RETURN OBJECT_CONSTRUCT('ok', TRUE, 'item_id', iid, 'status', st, 'previous_status', cur, 'related_id', rid);
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE {{ fq }}.MEM_ORG_LINK(
+    TOPIC_ID VARCHAR, FROM_ID VARCHAR, TO_ID VARCHAR, RELATION VARCHAR, REASON VARCHAR, ACTOR VARCHAR)
+RETURNS VARIANT
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+DECLARE
+    n NUMBER;
+BEGIN
+    IF (LOWER(RELATION) NOT IN ('related', 'contradicts', 'duplicates', 'refines')) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'relation must be related, contradicts, duplicates or refines');
+    END IF;
+    SELECT COUNT(*) INTO :n FROM {{ fq }}.MEM_ITEM
+     WHERE TOPIC_ID = :TOPIC_ID AND ITEM_ID IN (UPPER(TRIM(:FROM_ID)), UPPER(TRIM(:TO_ID)));
+    IF (n <> 2) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'both items must exist in topic ' || TOPIC_ID);
+    END IF;
+    INSERT INTO {{ fq }}.MEM_LINK (TOPIC_ID, FROM_ID, TO_ID, RELATION, REASON, CREATED_BY)
+        SELECT :TOPIC_ID, UPPER(TRIM(:FROM_ID)), UPPER(TRIM(:TO_ID)), LOWER(:RELATION), NULLIF(:REASON, ''), :ACTOR;
+    RETURN OBJECT_CONSTRUCT('ok', TRUE);
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE {{ fq }}.MEM_ORG_WRITE_OVERVIEW(TOPIC_ID VARCHAR, OVERVIEW VARCHAR, ACTOR VARCHAR)
+RETURNS VARIANT
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+BEGIN
+    IF (LENGTH(COALESCE(OVERVIEW, '')) < 20 OR LENGTH(OVERVIEW) > 4000) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'overview must be 20-4000 characters');
+    END IF;
+    INSERT INTO {{ fq }}.MEM_TOC (TOPIC_ID, GENERATED_BY, OVERVIEW) SELECT :TOPIC_ID, :ACTOR, TRIM(:OVERVIEW);
+    RETURN OBJECT_CONSTRUCT('ok', TRUE);
+END;
+$$;
+
+-- Compact listing for the organiser. STATUS: '' = open items (new, needs_review, active); 'all' = everything.
+CREATE OR REPLACE PROCEDURE {{ fq }}.MEM_ORG_LIST(TOPIC_ID VARCHAR, STATUS VARCHAR, CATEGORY VARCHAR, LIMIT_N NUMBER)
+RETURNS VARIANT
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+DECLARE
+    res VARIANT;
+BEGIN
+    SELECT COALESCE(ARRAY_AGG(OBJECT_CONSTRUCT_KEEP_NULL(
+               'id', ITEM_ID, 'status', STATUS, 'category', CATEGORY, 'title', TITLE,
+               'body_preview', LEFT(BODY, 300), 'tags', TAGS, 'as_of_date', AS_OF_DATE,
+               'agent_type', AGENT_TYPE, 'created_at', TO_VARCHAR(CREATED_AT, 'YYYY-MM-DD HH24:MI'),
+               'updated_at', TO_VARCHAR(UPDATED_AT, 'YYYY-MM-DD HH24:MI'), 'revision', REVISION,
+               'status_reason', STATUS_REASON, 'supersedes', SUPERSEDES, 'related_id', RELATED_ID))
+             WITHIN GROUP (ORDER BY CATEGORY, UPDATED_AT DESC), ARRAY_CONSTRUCT())
+      INTO :res
+      FROM (SELECT * FROM {{ fq }}.MEM_ITEM
+             WHERE TOPIC_ID = :TOPIC_ID
+               AND (CASE LOWER(COALESCE(:STATUS, ''))
+                        WHEN '' THEN STATUS IN ('new', 'needs_review', 'active')
+                        WHEN 'all' THEN TRUE
+                        ELSE STATUS = LOWER(:STATUS) END)
+               AND (COALESCE(:CATEGORY, '') = '' OR CATEGORY = LOWER(:CATEGORY))
+            QUALIFY ROW_NUMBER() OVER (ORDER BY UPDATED_AT DESC) <= LEAST(GREATEST(COALESCE(:LIMIT_N, 100), 1), 500));
+    RETURN res;
+END;
+$$;

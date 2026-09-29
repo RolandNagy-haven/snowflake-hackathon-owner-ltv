@@ -1,0 +1,46 @@
+-- {{ t.name }} ({{ t.id }}): Snowflake-managed MCP server(s).
+-- Endpoint: {{ t.mcp_url }}
+-- Tool inputs must be scalars (string / number / boolean): Snowflake rejects array and object arguments.
+{% macro tool(key) -%}
+{%- set tl = t.tools[key] %}
+  - name: {{ tl.name | tojson }}
+    title: {{ tl.title | tojson }}
+    type: "GENERIC"
+    identifier: "{{ fq }}.{{ n[key] }}"
+    description: {{ tl.description | tojson }}
+    config:
+      type: "procedure"
+      warehouse: "{{ t.warehouse }}"
+      input_schema:
+        type: "object"
+        properties:
+{%- for p in params[key] %}
+          {{ p.name }}:
+            type: "{{ p.json_type }}"
+            description: {{ p.description | tojson }}
+{%- endfor %}
+        required: {{ params[key] | selectattr('required') | map(attribute='name') | list | tojson }}
+{%- endmacro %}
+
+CREATE OR REPLACE MCP SERVER {{ fq }}.{{ n.mcp }}
+  COMMENT = {{ ('topic-memory ' ~ t.id ~ ' v' ~ t.version ~ ': ' ~ t.name) | sqlstr }}
+  FROM SPECIFICATION $$
+tools:
+{{- tool('index') }}
+{{- tool('search') }}
+{{- tool('get') }}
+{{- tool('save') }}
+$$;
+{% if t.read_only_server %}
+-- Read-only variant for consumers that should not contribute.
+CREATE OR REPLACE MCP SERVER {{ fq }}.{{ n.mcp_ro }}
+  COMMENT = {{ ('topic-memory ' ~ t.id ~ ' v' ~ t.version ~ ' (read-only): ' ~ t.name) | sqlstr }}
+  FROM SPECIFICATION $$
+tools:
+{{- tool('index') }}
+{{- tool('search') }}
+{{- tool('get') }}
+$$;
+{% else %}
+DROP MCP SERVER IF EXISTS {{ fq }}.{{ n.mcp_ro }};
+{% endif %}

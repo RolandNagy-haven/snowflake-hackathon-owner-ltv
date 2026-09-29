@@ -1,0 +1,20 @@
+-- {{ t.name }} ({{ t.id }}): remove the topic's objects.{% if purge %} PURGE: also deletes its data.{% else %} Data in the MEM_* tables is kept.{% endif %}
+DROP TASK IF EXISTS {{ fq }}.{{ n.organise_task }};
+DROP TASK IF EXISTS {{ fq }}.{{ n.review_task }};
+DROP STREAM IF EXISTS {{ fq }}.{{ n.stream }};
+DROP MCP SERVER IF EXISTS {{ fq }}.{{ n.mcp }};
+DROP MCP SERVER IF EXISTS {{ fq }}.{{ n.mcp_ro }};
+DROP AGENT IF EXISTS {{ fq }}.{{ n.agent }};
+{%- for sig in signatures.all %}
+DROP PROCEDURE IF EXISTS {{ fq }}.{{ sig }};
+{%- endfor %}
+{%- if purge %}
+DROP SEQUENCE IF EXISTS {{ fq }}.{{ n.seq }};
+DELETE FROM {{ fq }}.MEM_ITEM WHERE TOPIC_ID = '{{ t.id }}';
+DELETE FROM {{ fq }}.MEM_ITEM_HISTORY WHERE TOPIC_ID = '{{ t.id }}';
+DELETE FROM {{ fq }}.MEM_LINK WHERE TOPIC_ID = '{{ t.id }}';
+DELETE FROM {{ fq }}.MEM_TOC WHERE TOPIC_ID = '{{ t.id }}';
+DELETE FROM {{ fq }}.MEM_EVENT_LOG WHERE TOPIC_ID = '{{ t.id }}';
+DELETE FROM {{ fq }}.MEM_ORGANISER_RUN WHERE TOPIC_ID = '{{ t.id }}';
+DELETE FROM {{ fq }}.MEM_TOPIC WHERE TOPIC_ID = '{{ t.id }}';
+{%- endif %}

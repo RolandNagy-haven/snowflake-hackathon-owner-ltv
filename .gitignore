@@ -1,0 +1,74 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Secrets & credentials
+.env
+.env.*
+*.env
+secrets.*
+*.key
+*.pem
+connections.toml
+*_rsa_key.p8
+snowflake_credentials*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Jupyter / notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# Testing / coverage / type checkers
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# Data files (add exceptions with ! as needed)
+*.csv
+*.parquet
+*.feather
+*.xlsx
+*.db
+*.sqlite
+*.sqlite3
+data/
+tmp/
+scratch/
+
+# Logs
+*.log
+logs/
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node (if any tooling is added)
+node_modules/

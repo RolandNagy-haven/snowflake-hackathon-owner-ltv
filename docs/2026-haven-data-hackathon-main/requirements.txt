@@ -1,0 +1,22 @@
+# Snowflake: Snowpark sessions (to_pandas needs the pandas extra -> pyarrow)
+snowflake-snowpark-python[pandas]>=1.20
+# Connector with keyring, so client_store_temporary_credential caches the SSO ID token in the macOS keychain
+snowflake-connector-python[secure-local-storage,pandas]>=3.12
+
+# HTTP (Cortex Agent / Analyst REST, MCP proxy and client)
+requests>=2.31
+
+# topic-memory (memctl.py): templating, YAML topics, schema validation
+jinja2>=3.1
+pyyaml>=6.0
+jsonschema>=4.20
+
+# Data frames
+pandas>=2.2
+numpy>=1.26
+
+# Streamlit skill templates (.claude/skills/developing-with-streamlit/assets/templates)
+streamlit>=1.40
+altair>=5.5
+vega-datasets>=0.9
+yfinance>=0.2.55

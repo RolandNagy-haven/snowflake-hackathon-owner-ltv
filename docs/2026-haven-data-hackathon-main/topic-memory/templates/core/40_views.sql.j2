@@ -1,0 +1,20 @@
+-- topic-memory monitoring views.
+
+CREATE OR REPLACE VIEW {{ fq }}.MEM_V_TOPIC_STATS AS
+SELECT t.TOPIC_ID, t.NAME, t.VERSION, t.DEPLOYED_AT,
+       COUNT_IF(i.STATUS = 'active')                     AS ACTIVE,
+       COUNT_IF(i.STATUS = 'new')                        AS NEW_UNREVIEWED,
+       COUNT_IF(i.STATUS = 'needs_review')               AS NEEDS_REVIEW,
+       COUNT_IF(i.STATUS IN ('merged', 'superseded'))    AS CONSOLIDATED,
+       COUNT_IF(i.STATUS IN ('rejected', 'retired'))     AS REJECTED_OR_RETIRED,
+       MIN(IFF(i.STATUS = 'new', i.CREATED_AT, NULL))    AS OLDEST_UNREVIEWED_AT,
+       MAX(i.CREATED_AT)                                 AS LAST_SAVE_AT,
+       (SELECT MAX(r.FINISHED_AT) FROM {{ fq }}.MEM_ORGANISER_RUN r WHERE r.TOPIC_ID = t.TOPIC_ID) AS LAST_ORGANISER_RUN_AT
+  FROM {{ fq }}.MEM_TOPIC t
+  LEFT JOIN {{ fq }}.MEM_ITEM i ON i.TOPIC_ID = t.TOPIC_ID
+ GROUP BY 1, 2, 3, 4;
+
+CREATE OR REPLACE VIEW {{ fq }}.MEM_V_TOOL_USAGE AS
+SELECT TOPIC_ID, TOOL, AGENT_TYPE, DATE_TRUNC('day', AT) AS DAY, COUNT(*) AS CALLS
+  FROM {{ fq }}.MEM_EVENT_LOG
+ GROUP BY 1, 2, 3, 4;

@@ -1,0 +1,4 @@
+-- Footfall semantic view (+ its three helper views) in {{DB}}.{{SCHEMA}}.
+-- Single source of truth is the file below; deploy.py inlines it and retargets
+-- its HAVEN_DATA_SCIENCE_DEV / PETERZENTAI_LOCAL target to {{DB}}.{{SCHEMA}}.
+--@include ../../semantic-views/footfall/FOOTFALL_ARRIVALS_SV_V3.sql

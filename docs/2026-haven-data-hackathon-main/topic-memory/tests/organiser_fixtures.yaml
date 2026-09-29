@@ -1,0 +1,114 @@
+# Fixtures for organiser_eval.py (scratch topic only - the numbers here are made up for the test).
+# seed: saved and organised first; each should be activated.
+# tests: saved after the seeds; expect = acceptable decisions (first = ideal), target = seed key it should point at.
+seed:
+  - key: grain
+    title: FCT_PARK_ARRIVAL grain
+    category: data_structure
+    tables: HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL
+    as_of_date: "2026-09-25"
+    body: >-
+      HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL has one row per guest per on-park date per booking, so counts of
+      guests on park for a night are COUNT(DISTINCT GUEST_ID) filtered on ON_PARK_DATE_XID (YYYYMMDD integer).
+  - key: status_map
+    title: DIM_BOOKING_STATUS category mapping
+    category: definition
+    tables: HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS, HAVEN_STORE.HOLIDAY.DIM_BOOKING_STATUS
+    as_of_date: "2026-09-25"
+    body: >-
+      DIM_BOOKING_STATUS.BOOKING_STATUS_CATEGORY groups raw statuses: FIRM = live bookings (Booked, Closed,
+      Terminated); CANCELLED (Canceled, Canceled&Terminated); OFFER (Offer, Quote, Shopping, Waitlist). Join on
+      BOOKING_STATUS_XID.
+  - key: metric
+    title: Live 2027-season bookings total
+    category: validated_metric
+    tables: HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS
+    as_of_date: "2026-09-18"
+    body: >-
+      Live (FIRM) bookings for SEASON = 2027 at SNAPSHOT_DATE 2026-09-18: 120,000 bookings
+      (COUNT(DISTINCT BOOKING_ID), BOOKING_STATUS_CATEGORY = 'FIRM', BOOKING_TYPE = 'FIT').
+
+tests:
+  - key: paraphrase_dup
+    expect: [duplicate, merge]
+    target: grain
+    title: Grain of the park arrivals fact table
+    category: data_structure
+    agent_type: claude_code
+    tables: HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL
+    body: >-
+      FCT_PARK_ARRIVAL (HAVEN_STORE.ARRIVAL) is at guest x on-park-date x booking grain: to count guests on park
+      on a night use COUNT(DISTINCT GUEST_ID) with a filter on ON_PARK_DATE_XID.
+  - key: adds_detail
+    expect: [merge, activate]
+    target: status_map
+    title: DIM_BOOKING_STATUS residual 'No Match' category
+    category: definition
+    tables: HAVEN_STORE.HOLIDAY.DIM_BOOKING_STATUS
+    as_of_date: "2026-09-26"
+    body: >-
+      Besides FIRM / CANCELLED / OFFER, DIM_BOOKING_STATUS.BOOKING_STATUS_CATEGORY has a residual 'No Match' value
+      covering about 0.1% of FCT_HOLIDAY_BOOKINGS rows on the 2026-09-26 snapshot; exclude it from live counts.
+  - key: newer_value
+    expect: [supersede]
+    target: metric
+    supersedes: metric
+    title: Live 2027-season bookings total
+    category: validated_metric
+    tables: HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS
+    as_of_date: "2026-09-25"
+    body: >-
+      Live (FIRM) bookings for SEASON = 2027 at SNAPSHOT_DATE 2026-09-25: 123,500 bookings
+      (COUNT(DISTINCT BOOKING_ID), BOOKING_STATUS_CATEGORY = 'FIRM', BOOKING_TYPE = 'FIT').
+  - key: out_of_scope
+    expect: [reject]
+    title: Craig Tara F&B revenue August 2026
+    category: validated_metric
+    tables: HAVEN_DATA_SCIENCE_DEV.PETERZENTAI_LOCAL.FNB_RETAIL_SV
+    as_of_date: "2026-09-01"
+    body: >-
+      Food & beverage net revenue at Craig Tara for August 2026 was GBP 1.2m ex VAT (FNB_RETAIL_SV,
+      sales.net_revenue by park and business month).
+  - key: personal_data
+    expect: [reject]
+    title: Repeat arrival example
+    category: data_quality
+    tables: HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL
+    body: >-
+      Guest John Smith on booking DIG:4471190 appears with two ARRIVAL_DATE_XID values (20260801 and 20260808)
+      for the same stay; his party of 4 arrived twice according to the table.
+  - key: one_off_answer
+    expect: [reject]
+    title: Answer to user question about 3 Aug
+    category: validated_metric
+    tables: HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL
+    body: >-
+      The user asked how many guests arrived at Haven Seashore on Sunday 3 August; I told them 1,204. They seemed
+      happy with the answer.
+  - key: new_valid
+    expect: [activate]
+    title: FCT_HOLIDAY_BOOKINGS is a daily full snapshot
+    category: query_pattern
+    tables: HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS
+    as_of_date: "2026-09-25"
+    body: >-
+      HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS holds one full copy of every booking per SNAPSHOT_DATE (~4.9M rows per
+      snapshot, ~3,000 snapshots). Always filter SNAPSHOT_DATE to one date (default: the latest) or a short list.
+  - key: weak_contradiction
+    expect: [escalate, reject]
+    title: FCT_PARK_ARRIVAL has one row per booking
+    category: data_structure
+    confidence: hypothesis
+    tables: HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL
+    body: >-
+      I think FCT_PARK_ARRIVAL has one row per booking, so COUNT(*) gives the number of bookings arriving.
+  - key: uncategorised
+    expect: [activate]
+    expect_category: data_quality
+    title: FCT_PARK_ARRIVAL ARRIVED_AT_XID sentinel -1
+    tables: HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL
+    as_of_date: "2026-09-25"
+    body: >-
+      In HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL the column ARRIVED_AT_XID uses -1 as a sentinel for "arrival not yet
+      confirmed"; for recent arrival dates most rows still carry -1, so it cannot be used to count expected arrivals.
+

@@ -1,0 +1,10 @@
+-- {{ t.name }} ({{ t.id }}): grants for roles other than the owner.
+{%- for role in t.usage_roles %}
+GRANT USAGE ON MCP SERVER {{ fq }}.{{ n.mcp }} TO ROLE {{ role }};
+{%- if t.read_only_server %}
+GRANT USAGE ON MCP SERVER {{ fq }}.{{ n.mcp_ro }} TO ROLE {{ role }};
+{%- endif %}
+{%- for sig in signatures.contributor %}
+GRANT USAGE ON PROCEDURE {{ fq }}.{{ sig }} TO ROLE {{ role }};
+{%- endfor %}
+{%- endfor %}

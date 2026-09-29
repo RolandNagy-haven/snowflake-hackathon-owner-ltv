@@ -1,0 +1,97 @@
+-- topic-memory core tables: one set shared by every topic (keyed by TOPIC_ID).
+-- Idempotent: CREATE ... IF NOT EXISTS, and additive ALTERs for later columns.
+
+CREATE TABLE IF NOT EXISTS {{ fq }}.MEM_TOPIC (
+    TOPIC_ID        VARCHAR       NOT NULL,
+    NAME            VARCHAR       NOT NULL,
+    VERSION         NUMBER        NOT NULL,
+    CONFIG          VARIANT       NOT NULL,     -- full rendered config (brief, schema, tool names, ...)
+    CONFIG_HASH     VARCHAR       NOT NULL,
+    OBJECT_PREFIX   VARCHAR       NOT NULL,     -- MEM_<TOPIC_ID>
+    MCP_SERVER      VARCHAR,
+    ORGANISER_AGENT VARCHAR,
+    DEPLOYED_AT     TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    DEPLOYED_BY     VARCHAR       NOT NULL DEFAULT CURRENT_USER()
+);
+
+-- One row per memory item, all topics. STATUS lifecycle:
+--   new -> active | merged | superseded | rejected | needs_review ; active -> superseded | merged | retired
+CREATE TABLE IF NOT EXISTS {{ fq }}.MEM_ITEM (
+    TOPIC_ID      VARCHAR       NOT NULL,
+    ITEM_ID       VARCHAR       NOT NULL,       -- <PREFIX>-00001
+    TITLE         VARCHAR       NOT NULL,       -- one index line
+    BODY          VARCHAR       NOT NULL,
+    CATEGORY      VARCHAR       NOT NULL,
+    TAGS          ARRAY,
+    ATTRIBUTES    OBJECT,                       -- topic-defined fields
+    AS_OF_DATE    DATE,
+    STATUS        VARCHAR       NOT NULL DEFAULT 'new',
+    STATUS_REASON VARCHAR,
+    RELATED_ID    VARCHAR,                      -- merged into / superseded by
+    SUPERSEDES    VARCHAR,                      -- contributor's hint: this item corrects <id>
+    REVISION      NUMBER        NOT NULL DEFAULT 1,
+    AGENT_TYPE    VARCHAR       NOT NULL,       -- contributor identity
+    CREATED_BY    VARCHAR       NOT NULL DEFAULT CURRENT_USER(),
+    CREATED_AT    TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    UPDATED_AT    TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    UPDATED_BY    VARCHAR,                      -- 'contributor:<agent_type>' | 'organiser:pipeline' | 'organiser:agent'
+    REVIEWED_AT   TIMESTAMP_LTZ,
+    EMBED_MODEL   VARCHAR       NOT NULL,
+    EMBEDDING     VECTOR(FLOAT, 1024)
+);
+
+-- Append-only audit: one row per revision / status change.
+CREATE TABLE IF NOT EXISTS {{ fq }}.MEM_ITEM_HISTORY (
+    TOPIC_ID  VARCHAR       NOT NULL,
+    ITEM_ID   VARCHAR       NOT NULL,
+    REVISION  NUMBER        NOT NULL,
+    AT        TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    ACTOR     VARCHAR       NOT NULL,
+    OPERATION VARCHAR       NOT NULL,           -- create | update | status:<new status>
+    REASON    VARCHAR,
+    SNAPSHOT  OBJECT                            -- item state after the operation (no embedding)
+);
+
+CREATE TABLE IF NOT EXISTS {{ fq }}.MEM_LINK (
+    TOPIC_ID   VARCHAR       NOT NULL,
+    FROM_ID    VARCHAR       NOT NULL,
+    TO_ID      VARCHAR       NOT NULL,
+    RELATION   VARCHAR       NOT NULL,          -- merged_into | superseded_by | duplicates | related | contradicts
+    REASON     VARCHAR,
+    CREATED_AT TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    CREATED_BY VARCHAR       NOT NULL
+);
+
+-- Organiser-written overview shown at the top of the index; the latest row per topic wins.
+CREATE TABLE IF NOT EXISTS {{ fq }}.MEM_TOC (
+    TOPIC_ID     VARCHAR       NOT NULL,
+    GENERATED_AT TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    GENERATED_BY VARCHAR       NOT NULL,
+    OVERVIEW     VARCHAR       NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS {{ fq }}.MEM_EVENT_LOG (
+    AT         TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    TOPIC_ID   VARCHAR       NOT NULL,
+    TOOL       VARCHAR       NOT NULL,          -- save | search | get | index
+    AGENT_TYPE VARCHAR,
+    USER_NAME  VARCHAR       NOT NULL DEFAULT CURRENT_USER(),
+    DETAIL     OBJECT
+);
+
+CREATE TABLE IF NOT EXISTS {{ fq }}.MEM_ORGANISER_RUN (
+    RUN_ID      VARCHAR       NOT NULL,
+    TOPIC_ID    VARCHAR       NOT NULL,
+    TRIGGER_KIND VARCHAR      NOT NULL,         -- insert | cadence | manual
+    ENGINE      VARCHAR       NOT NULL,         -- pipeline | agent
+    STARTED_AT  TIMESTAMP_LTZ NOT NULL,
+    FINISHED_AT TIMESTAMP_LTZ,
+    ITEMS_IN    NUMBER,
+    ACTIONS     ARRAY,
+    RESULT      VARCHAR,
+    ERROR       VARCHAR
+);
+
+-- Streams are consumed by a DML that reads them; owner's-rights procedures can't use temp tables,
+-- so the organiser consumes its topic stream into this (always empty) sink.
+CREATE TABLE IF NOT EXISTS {{ fq }}.MEM_STREAM_SINK (TOPIC_ID VARCHAR, ITEM_ID VARCHAR);

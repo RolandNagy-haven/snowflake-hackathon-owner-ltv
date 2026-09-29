@@ -1,0 +1,437 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "topic-memory topic configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "topic",
+    "brief",
+    "schema",
+    "deployment"
+  ],
+  "properties": {
+    "topic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "item_noun",
+        "id_prefix"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,30}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "item_noun": {
+          "type": "string",
+          "pattern": "^[a-z][a-z_]{1,20}$"
+        },
+        "item_noun_plural": {
+          "type": "string",
+          "pattern": "^[a-z][a-z_]{1,22}$"
+        },
+        "id_prefix": {
+          "type": "string",
+          "pattern": "^[A-Z]{2,5}$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "owner": {
+          "type": "string"
+        }
+      }
+    },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "scope",
+        "contribute_when",
+        "how_to_write",
+        "do_not_save"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 700
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 700
+        },
+        "contribute_when": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 700
+        },
+        "how_to_write": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 700
+        },
+        "do_not_save": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 500
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "usage": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 700,
+          "description": "How and how often clients should consult the memory (e.g. it is live during an event); rendered into every tool description and the index"
+        }
+      }
+    },
+    "contributors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "open": {
+          "type": "boolean"
+        },
+        "agent_types": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{1,40}$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "categories"
+      ],
+      "properties": {
+        "categories": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{1,30}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 5
+          }
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "open": {
+              "type": "boolean"
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20
+            },
+            "suggested": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9_\\-]{1,40}$"
+              }
+            }
+          }
+        },
+        "attributes": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{1,30}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "description"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "text",
+                  "list",
+                  "enum",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "max_len": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9_\\-]+$"
+                }
+              },
+              "description": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 400
+              }
+            }
+          }
+        },
+        "as_of_date": {
+          "enum": [
+            "required",
+            "optional"
+          ]
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title_max": {
+              "type": "integer",
+              "minimum": 20,
+              "maximum": 300
+            },
+            "body_max": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 16000
+            }
+          }
+        },
+        "pii_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(index|search|get|save)$": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{2,40}$"
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 2500
+            },
+            "extra": {
+              "type": "string",
+              "maxLength": 800
+            }
+          }
+        }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "embed_model": {
+          "enum": [
+            "snowflake-arctic-embed-l-v2.0",
+            "snowflake-arctic-embed-l-v2.0-8k",
+            "multilingual-e5-large",
+            "voyage-multilingual-2",
+            "nv-embed-qa-4"
+          ]
+        },
+        "top_k_default": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "top_k_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "min_similarity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "save: similar existing items shown above this cosine similarity"
+        },
+        "dup_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "search_floor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "search drops results scoring below this"
+        },
+        "keyword_boost": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "max score added for query words found in the text"
+        }
+      }
+    },
+    "toc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "section_item_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "show_unreviewed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "organiser": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "on_insert": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "batch_max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "cadence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "schedule": {
+              "type": "string"
+            },
+            "budget_seconds": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 3600
+            }
+          }
+        },
+        "review_after_days": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "triage_prompt": {
+          "type": "string"
+        },
+        "review_prompt": {
+          "type": "string"
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "database",
+        "schema",
+        "warehouse"
+      ],
+      "properties": {
+        "database": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_$]*$"
+        },
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_$]*$"
+        },
+        "warehouse": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_$]*$"
+        },
+        "read_only_server": {
+          "type": "boolean"
+        },
+        "log_reads": {
+          "type": "boolean"
+        },
+        "usage_roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_$]*$"
+          }
+        },
+        "role": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_$]*$",
+          "description": "primary role used to deploy (owns the objects; the tools run with its rights)"
+        },
+        "create_schema": {
+          "type": "boolean",
+          "description": "CREATE SCHEMA IF NOT EXISTS before deploying"
+        },
+        "client_name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_\\-]{1,50}$",
+          "description": "server name in .mcp.json (default mem-<topic id>)"
+        },
+        "client_role": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_$]*$",
+          "description": "role the client's MCP session uses (SF_ROLE for the proxy)"
+        }
+      }
+    },
+    "extends": {
+      "type": "string",
+      "description": "another topic config (path relative to this file) to start from; this file's keys override it"
+    }
+  }
+}

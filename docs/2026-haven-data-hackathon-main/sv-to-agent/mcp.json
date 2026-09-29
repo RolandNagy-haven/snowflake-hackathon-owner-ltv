@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "snowflake-pandas-agent": {
+      "type": "http",
+      "url": "https://bd78472.eu-west-1.snowflakecomputing.com/api/v2/databases/NEXUS_HACKATHON_DB/schemas/PZ_CORTEX_SPIKE/mcp-servers/SV_PANDAS_AGENT_MCP",
+      "headersHelper": "SF_ROLE=NEXUS_SPIKE /Users/z/Dev/haven/service-haven-data-timeseries-demand-prediction/.venv/bin/python3 /Users/z/Dev/haven/cortex-semantic-spike/invocation-poc/sf_mcp_auth.py"
+    }
+  }
+}

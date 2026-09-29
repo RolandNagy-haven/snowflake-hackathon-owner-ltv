@@ -1,0 +1,192 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2821
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\froman\fcharset0 Times-Roman;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 \'97 COMMENT: 
+\f1 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Also what is going to be important for you and your team is this SQL query which brings in things like BBV etc.
+\f0 \kerning1\expnd0\expndtw0 \outl0\strokewidth0 \
+\
+\
+\
+WITH current_month AS (\
+    SELECT MAX(MONTH_START_DATE) AS max_date\
+    FROM HAVEN_DATA_SCIENCE.OWNER_CHURN.OWNER_RISK_SCORES\
+),\
+\
+three_months_ago AS (\
+    SELECT DATEADD(month, -3, max_date) AS three_months_ago_date\
+    FROM current_month\
+),\
+\
+-- v4: Count how many of the last 3 months each account was classified 'high'\
+high_risk_stability AS (\
+    SELECT\
+        ors.ACCOUNT_NO,\
+        SUM(CASE WHEN ors.RISK_GROUP = 'high' THEN 1 ELSE 0 END) AS HIGH_COUNT_3M\
+    FROM HAVEN_DATA_SCIENCE.OWNER_CHURN.OWNER_RISK_SCORES ors\
+    CROSS JOIN current_month cm\
+    WHERE ors.MONTH_START_DATE > DATEADD(month, -3, cm.max_date)\
+      AND ors.MONTH_START_DATE <= cm.max_date\
+    GROUP BY ors.ACCOUNT_NO\
+),\
+\
+-- v4: Only include owners who are currently 'high' AND have been 'high' at least 2 of last 3 months\
+current_risk AS (\
+    SELECT\
+        ors.ACCOUNT_NO,\
+        ors.PARK_CODE,\
+        ors.MONTH_START_DATE,\
+        ors.RISK_NORMALIZED,\
+        ors.RISK_GROUP,\
+        ors.RISK_DRIVERS_JSON,\
+        ors.OWNERSHIP_LENGTH_BUCKET,\
+        ors.IS_ACTIVE_CURRENTLY,\
+        hrs.HIGH_COUNT_3M\
+    FROM HAVEN_DATA_SCIENCE.OWNER_CHURN.OWNER_RISK_SCORES ors\
+    INNER JOIN high_risk_stability hrs\
+        ON ors.ACCOUNT_NO = hrs.ACCOUNT_NO\
+    CROSS JOIN current_month cm\
+    WHERE ors.MONTH_START_DATE = cm.max_date\
+    AND ors.RISK_GROUP = 'high'\
+    AND ors.IS_ACTIVE_CURRENTLY = 1\
+    AND hrs.HIGH_COUNT_3M >= 2\
+),\
+\
+prev_risk AS (\
+    SELECT\
+        ACCOUNT_NO,\
+        RISK_NORMALIZED AS PREVIOUS_RISK\
+    FROM HAVEN_DATA_SCIENCE.OWNER_CHURN.OWNER_RISK_SCORES\
+    WHERE MONTH_START_DATE = (SELECT three_months_ago_date FROM three_months_ago)\
+),\
+\
+current_pitch AS (\
+    SELECT DISTINCT\
+        oah.ACCOUNT_NO,\
+        ps.PITCH_STATUS_CODE,\
+        ph.PITCH_CODE,\
+        ph.PITCH_ID,\
+        ph.AREA_DESCRIPTION,\
+        ph.ZONE_DESCRIPTION,\
+        ph.PITCH_GRADE_DESCRIPTION\
+    FROM HAVEN_STORE.CARAVANS.FCT_ACCOUNT_HISTORY fah\
+    INNER JOIN HAVEN_STORE.CARAVANS.DIM_OWNER_ACCOUNT_HISTORY oah\
+        ON fah.OWNER_ACCOUNT_HISTORY_XID = oah.OWNER_ACCOUNT_HISTORY_XID\
+    INNER JOIN HAVEN_STORE.CARAVANS.DIM_PITCH_HISTORY ph\
+        ON fah.PITCH_HISTORY_XID = ph.PITCH_HISTORY_XID\
+    INNER JOIN HAVEN_STORE.CARAVANS.DIM_PITCH_STATUS ps\
+        ON fah.PITCH_STATUS_XID = ps.PITCH_STATUS_XID\
+    WHERE fah.SNAPSHOT_DATE = (SELECT MAX(SNAPSHOT_DATE) FROM HAVEN_STORE.CARAVANS.FCT_ACCOUNT_HISTORY)\
+)\
+\
+SELECT\
+    -- Risk fields\
+    cr.ACCOUNT_NO,\
+    cr.PARK_CODE,\
+    dp.PARK_NAME,\
+    dp.PITCH_STRATEGY_GROUP                                         AS PARK_TIER,\
+    cr.MONTH_START_DATE,\
+    cr.RISK_NORMALIZED,\
+    cr.RISK_GROUP,\
+    cr.HIGH_COUNT_3M,                                               -- v4: months high in last 3\
+    CASE\
+        WHEN pr.PREVIOUS_RISK IS NOT NULL AND pr.PREVIOUS_RISK != 0\
+        THEN ROUND(((cr.RISK_NORMALIZED - pr.PREVIOUS_RISK) / pr.PREVIOUS_RISK) * 100, 2)\
+        ELSE NULL\
+    END                                                             AS RISK_CHANGE_PCT_3M,\
+    cr.RISK_DRIVERS_JSON,\
+    cr.OWNERSHIP_LENGTH_BUCKET,\
+\
+    -- Van fields\
+    ts.VAN_STOCK_NO,\
+    ts.YEAR_MADE                                                    AS VAN_YEAR,\
+    ts.MAKE                                                         AS VAN_MAKE,\
+    ts.MODEL                                                        AS VAN_MODEL,\
+    ts.VAN_GRADE_DESCRIPTION                                        AS VAN_GRADE,\
+    ts.VAN_LENGTH,\
+    ts.VAN_WIDTH,\
+    ts.BEDROOM_COUNT                                                AS VAN_BEDS,\
+\
+    -- Bottom book value (PEX column \'97 always treats van as used, fixes #1343 is_new flag issue)\
+    bbv.PEX_BASE_TRADE_VALUE                                        AS BOTTOM_BOOK_VALUE,\
+\
+    -- Financial fields\
+    ts.ASSUMED_FINANCE_BALANCE                                      AS FINANCE_SETTLEMENT,\
+    ts.RENT_LEDGER_BALANCE                                          AS OUTSTANDING_RENT_LEDGER_BALANCE,\
+    ts.MONTHLY_INCOME_TOTAL                                         AS LETTINGS_CASH_MONTHLY,\
+\
+    -- Pitch status\
+    cp.PITCH_STATUS_CODE,\
+\
+    -- Pitch fields\
+    cp.PITCH_CODE                                                   AS CURRENT_PITCH_CODE,\
+    cp.PITCH_ID                                                     AS CURRENT_PITCH_NUMBER,\
+    cp.PITCH_GRADE_DESCRIPTION                                      AS PITCH_GRADE,\
+    cp.AREA_DESCRIPTION                                             AS PITCH_AREA,\
+    cp.ZONE_DESCRIPTION                                             AS PITCH_ZONE,\
+\
+    -- Site fee fields (from CURRENT_PITCH_SITE_FEE_ANALYSIS)\
+    sf.PITCH_SITE_FEES_CY,\
+    sf.PITCH_RENT_REDUCTION_CY,\
+    sf.PITCH_NET_SITE_FEE_CY,\
+    sf.CURRENT_OWNER_SITE_FEES_CY,\
+    sf.CURRENT_OWNER_RENT_REDUCTION_CY,\
+    sf.CURRENT_OWNER_NET_SITE_FEE_CY\
+\
+    -- Contact fields\
+  --  h.TITLE                                                         AS OWNER_TITLE,\
+  --  h.FIRST_NAME                                                    AS OWNER_FIRST_NAME,\
+  --  h.LAST_NAME                                                     AS OWNER_LAST_NAME,\
+  --  h.PHONE_NUMBER                                                  AS OWNER_PHONE,\
+  --  e.EMAIL                                                         AS OWNER_EMAIL,\
+  --  e.EMAIL_VERIFIED\
+\
+FROM current_risk cr\
+\
+-- 3-month prior risk for change %\
+LEFT JOIN prev_risk pr\
+    ON cr.ACCOUNT_NO = pr.ACCOUNT_NO\
+\
+-- Park dimension (name + tier)\
+LEFT JOIN HAVEN_STORE.COMMON.DIM_PARK dp\
+    ON cr.PARK_CODE = dp.PARK_CODE\
+\
+-- Van & financial snapshot (latest month for this account)\
+LEFT JOIN HAVEN_STORE.CARAVANS.OWNER_STATUS_TIME_SERIES_ANALYSIS ts\
+    ON cr.ACCOUNT_NO = ts.ACCOUNT_NO\
+    AND ts.MONTH_END_DATE = (\
+        SELECT MAX(t2.MONTH_END_DATE)\
+        FROM HAVEN_STORE.CARAVANS.OWNER_STATUS_TIME_SERIES_ANALYSIS t2\
+        WHERE t2.ACCOUNT_NO = cr.ACCOUNT_NO\
+    )\
+\
+-- Bottom book value (production table with GGO leak fix + PEX columns per #1343)\
+LEFT JOIN HAVEN_STORE.CARAVANS.VAN_BOTTOM_BOOK_VALUE bbv\
+    ON ts.VAN_STOCK_NO = bbv.VAN_STOCK_NO\
+\
+-- Current pitch via account history fact table\
+LEFT JOIN current_pitch cp\
+    ON cr.ACCOUNT_NO = cp.ACCOUNT_NO\
+\
+-- Current owner site fee (what the existing owner is being charged)\
+LEFT JOIN HAVEN_STORE.CARAVANS.CURRENT_PITCH_SITE_FEE_ANALYSIS sf\
+    ON cr.ACCOUNT_NO = sf.ACCOUNT_NO\
+\
+-- Account detail -> identity join key (HAVEN_ID)\
+LEFT JOIN HAVEN_STORE.CARAVANS.ACCOUNT_DETAIL ad\
+    ON cr.ACCOUNT_NO = ad.ACCOUNT_NO\
+\
+-- Owner name & phone\
+LEFT JOIN HAVEN_BASE.IDENTITY.HID_TO_PROFILE h\
+    ON ad.HAVEN_ID = h.HID\
+\
+-- Owner email\
+LEFT JOIN HAVEN_BASE.IDENTITY.HID_TO_EMAIL e\
+    ON ad.HAVEN_ID = e.HID\
+\
+ORDER BY cr.RISK_NORMALIZED DESC;\
+ }

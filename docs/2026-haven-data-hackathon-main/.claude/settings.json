@@ -1,0 +1,6 @@
+{
+  "awsAuthRefresh": "aws sso login --profile claude-code",
+  "env": {
+    "AWS_PROFILE": "claude-code"
+  }
+}

@@ -1,0 +1,183 @@
+# Topic: durable findings about Haven caravan owners across the three domain agents (Owner LTV, Top of
+# Funnel, Performance Marketing) that share one owner definition. This memory is the "Knowledge agent" of
+# the shared-owner-view hackathon brief: it remembers what gets asked and learned about owners.
+# First draft: the domain agents and their semantic views do not exist yet; refine sources, categories and
+# prompts as the teams discover how the data behaves.
+# Deploy:  .venv/bin/python topic-memory/memctl.py deploy topics/shared_owner_view.yaml
+topic:
+  id: shared_owner_view
+  name: Haven shared owner view findings
+  item_noun: finding
+  item_noun_plural: findings
+  id_prefix: SOV            # SOV-00001...
+  version: 1
+  owner: NEXUS_SPIKE
+
+brief:
+  summary: >-
+    Shared, durable knowledge about Haven caravan owners across three domains that share one owner
+    definition: Owner LTV (account history, churn model), Top of Funnel (enquiry -> appointment ->
+    signup -> completion) and Performance Marketing (Bloomreach, channel attribution). Written by the
+    domain agents, the orchestrator and analysts so the next one skips re-discovery.
+  scope: >-
+    The shared owner definition and how owner ids join across domains (the BRIDGE_*_TO_CS_TIERED_XID
+    family), table grain and keys, code/status meanings, data-quality issues, business definitions
+    (owner, churn, conversion, attribution), validated numbers, fast query patterns and evidenced
+    learnings about owners. Not in scope: holiday bookings/footfall, F&B, individual owners.
+  usage: >-
+    This memory is LIVE: during the hackathon three teams' agents and people add findings at the same
+    time, and an organiser merges, corrects and supersedes them in the background. Check it often, not
+    just once: before each new sub-question, before querying the large source tables, before stating
+    a number or definition (especially what counts as an owner), and right before saving. Anything you
+    read earlier in your session may already be outdated.
+  contribute_when: >-
+    You established something another team would otherwise rediscover by querying: a verified grain,
+    key or cross-domain join, a code or sentinel meaning, a data-quality problem, a definition that
+    changes owner counts, a checked headline number, a fast query pattern, or an evidenced learning
+    about owners. Save at most 2-3 findings per task, after verifying.
+  how_to_write: >-
+    One atomic, self-contained fact per finding. The title is one index line (what the finding is
+    about, <= 100 chars). The body states the fact with fully-qualified table and column names,
+    units, filters and the date the fact refers to, then the SQL that proves it when useful.
+    Search first. If an existing finding is wrong or outdated, save the corrected one with
+    supersedes=<its id>.
+  do_not_save: >-
+    Personal data (owner/prospect names, emails, phones, addresses, individual owner, account or
+    plot ids as examples), one-off answers, speculation without evidence, facts obvious from one
+    DESCRIBE TABLE, credentials.
+  sources:
+    - "Owner LTV: HAVEN_STORE.CARAVANS.FCT_ACCOUNT_HISTORY, HAVEN_STORE.CARAVANS.OWNER_STATUS_TIME_SERIES_ANALYSIS, OWNER_RISK_SCORES (HAVEN_DATA_SCIENCE_DEV.OWNER_CHURN / DATA_SCIENCE), HAVEN_STORE.COMMON.DIM_PARK"
+    - "Top of Funnel: HAVEN_STORE.PROSPECTS.FCT_TOP_OF_THE_FUNNEL, HAVEN_STORE.PROSPECTS.DIM_TOP_OF_THE_FUNNEL, HAVEN_STORE.PROSPECTS.BRIDGE_*_TO_CS_TIERED_XID"
+    - "Performance Marketing: HAVEN_STORE.PERFORMANCE_MARKETING.FCT_ATTRIBUTION_JOURNEY_SUMMARY, FCT_ATTRIBUTION_CHANNEL_JOURNEY_ROLE, DIM_BLOOMREACH_CUSTOMER"
+    - "Semantic views of the three domain agents and the shared owner definition (to be added)"
+
+contributors:
+  # Contributor identity = agent type (passed on every save). Any value is accepted; these are examples.
+  open: true
+  agent_types:
+    claude_code: Claude Code sessions and their subagents
+    owner_ltv_agent: Cortex agent of the Owner LTV team
+    top_of_funnel_agent: Cortex agent of the Top of Funnel team
+    performance_marketing_agent: Cortex agent of the Performance Marketing team
+    orchestrator_agent: Cortex orchestrator agent behind Snowflake CoWork
+    human: A person recording a finding by hand
+
+schema:
+  categories:
+    owner_definition: The shared owner definition, its counting rules and edge cases (what makes someone an owner, when they stop being one)
+    identity_resolution: How owner / prospect / customer ids map across domains (CS_TIERED_XID bridges, match rates, fan-out)
+    data_structure: Grain, keys, joins and snapshot semantics of a table or view
+    definition: Other business definitions (churn, risk score, funnel stage, conversion, attribution role)
+    data_quality: Known gaps, anomalies, sentinel values and lags, with their scope and dates
+    validated_metric: A checked headline number with its exact definition, filters and as_of_date
+    query_pattern: A proven, efficient SQL pattern for these tables
+    owner_insight: An evidenced, durable learning about owners (tenure, churn drivers, funnel or channel effects)
+    open_question: Something observed but not yet explained
+  tags:
+    open: true
+    max: 6
+    suggested: [owner, churn, risk_score, account_history, funnel, prospect, attribution, bloomreach, channel, xid, dim_park, grain, performance]
+  attributes:
+    domain:
+      type: enum
+      values: [owner_ltv, top_of_funnel, performance_marketing, cross_domain]
+      required: true
+      description: "Which team's domain the finding is about; cross_domain = the shared owner definition or joins between domains"
+    tables:
+      type: list
+      required: false
+      description: Comma-separated fully-qualified tables/views the finding is about, e.g. HAVEN_STORE.CARAVANS.FCT_ACCOUNT_HISTORY
+    confidence:
+      type: enum
+      values: [verified, likely, hypothesis]
+      required: true
+      description: "verified = checked with a query in this task; likely = strong indirect evidence; hypothesis = unconfirmed"
+    evidence_sql:
+      type: text
+      required: false
+      max_len: 4000
+      description: Optional SQL that proves or reproduces the finding
+  as_of_date: optional          # required | optional
+  limits:
+    title_max: 120
+    body_max: 3000
+  pii_patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '(\+44 ?7|07)[0-9]{3} ?[0-9]{6}'
+    - '[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}'      # UK postcode
+
+tools:
+  # Distinct names (not findings_index / ...): the orchestrator may attach this server next to the
+  # footfall memory, and tool names must not collide.
+  index:
+    name: owner_findings_index
+    title: Shared owner view findings - index
+  search:
+    name: search_owner_findings
+    title: Search shared owner view findings
+    extra: >-
+      Search before deciding who counts as an owner, before joining ids across domains, and before
+      querying FCT_ACCOUNT_HISTORY (~350M rows): the answer is often already here.
+  get:
+    name: get_owner_findings
+    title: Get shared owner view findings by id
+  save:
+    name: record_owner_finding
+    title: Record a shared owner view finding
+
+retrieval:
+  embed_model: snowflake-arctic-embed-l-v2.0
+  top_k_default: 8
+  top_k_max: 25
+  min_similarity: 0.35     # save: show similar existing findings above this cosine similarity
+  dup_threshold: 0.85      # save: flag as likely duplicate
+  search_floor: 0.2        # search: drop results below this score (cosine + keyword boost)
+  keyword_boost: 0.15
+
+toc:
+  section_item_limit: 30
+  show_unreviewed: true
+
+organiser:
+  model: claude-sonnet-5
+  on_insert:
+    enabled: true
+    batch_max: 20
+  cadence:
+    enabled: true
+    schedule: USING CRON 0 5 * * * Europe/London
+    budget_seconds: 600
+  review_after_days:
+    validated_metric: 90
+    data_quality: 60
+    owner_insight: 90
+    open_question: 30
+  triage_prompt: |
+    Be strict about scope and durability: a finding must help a future analyst or agent working on
+    Haven owners in the Owner LTV, Top of Funnel or Performance Marketing domains. Numbers must carry
+    their definition (especially which owner definition) and as_of date, otherwise rewrite them to
+    say what is missing or reject them. owner_insight findings need evidence (a query, a metric,
+    a model output); without it, recategorise as open_question or reject. Findings that contradict
+    the current owner_definition must supersede it explicitly or be escalated. Prefer merging into
+    an existing finding over keeping two about the same table property. Titles must work as one line
+    in an index: start with the table or concept (e.g. "FCT_ACCOUNT_HISTORY grain: ...").
+  review_prompt: |
+    Keep the index scannable in one minute. Group related findings about the same table property
+    by merging them. Keep exactly one current owner_definition finding per rule; supersede older
+    variants. validated_metric findings older than their review window are not wrong, but must carry
+    as_of_date; retire them only when a newer finding replaces them. Resolve open_question findings
+    that later findings answer: supersede them with the answering finding. In the overview, first
+    state the current shared owner definition and how to join owners across domains, then the 3-5
+    most important things a new analyst of each domain must know.
+
+deployment:
+  database: NEXUS_HACKATHON_DB
+  schema: SHARED_OWNER_VIEW_MEMORY
+  warehouse: NEXUS_HACKATHON_WH
+  role: NEXUS_SPIKE          # deploys and owns everything; the tools run with its rights
+  create_schema: true
+  client_name: mem-shared-owner-view-memory
+  client_role: NEXUS_SPIKE   # role of the MCP session (SF_ROLE for the proxy)
+  read_only_server: true
+  log_reads: true
+  usage_roles: []            # add the teams' roles here to grant USAGE on the MCP server + tool procedures

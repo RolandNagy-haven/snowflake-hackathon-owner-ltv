@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "snowflake-invocation-poc": {
+      "type": "http",
+      "url": "https://bd78472.eu-west-1.snowflakecomputing.com/api/v2/databases/HAVEN_DATA_SCIENCE_DEV/schemas/PETERZENTAI_LOCAL/mcp-servers/INVOCATION_POC_MCP",
+      "headersHelper": ".venv/bin/python3 invocation-poc/sf_mcp_auth.py"
+    },
+    "snowflake-semantic-views": {
+      "type": "http",
+      "url": "https://bd78472.eu-west-1.snowflakecomputing.com/api/v2/databases/HAVEN_DATA_SCIENCE_DEV/schemas/PETERZENTAI_LOCAL/mcp-servers/SEMANTIC_VIEWS_MCP",
+      "headersHelper": ".venv/bin/python3 invocation-poc/sf_mcp_auth.py"
+    },
+    "snowflake-hello-world-pro": {
+      "type": "http",
+      "url": "https://bd78472.eu-west-1.snowflakecomputing.com/api/v2/databases/HAVEN_DATA_SCIENCE_DEV/schemas/PETERZENTAI_LOCAL/mcp-servers/HELLO_WORLD_PRO_MCP",
+      "headersHelper": ".venv/bin/python3 invocation-poc/sf_mcp_auth.py"
+    }
+  }
+}

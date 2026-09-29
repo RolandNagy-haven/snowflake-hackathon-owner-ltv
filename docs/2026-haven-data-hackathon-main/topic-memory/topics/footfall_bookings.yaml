@@ -1,0 +1,158 @@
+# Topic: durable findings about Haven footfall (guests on park / arrivals) and holiday bookings data.
+# Deploy:  python topic-memory/memctl.py deploy topic-memory/topics/footfall_bookings.yaml
+topic:
+  id: footfall_bookings
+  name: Haven footfall & bookings data findings
+  item_noun: finding
+  item_noun_plural: findings
+  id_prefix: FBF
+  version: 1
+  owner: PETERZENTAI
+
+brief:
+  summary: >-
+    Shared, durable knowledge about Haven's guest footfall data (guests on park, arrivals, leavers:
+    HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL and the footfall semantic views) and holiday bookings data
+    (HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS daily snapshots), written by the agents that analyse it
+    so the next agent skips re-discovery.
+  scope: >-
+    Table grain, join keys, code and status meanings, snapshot semantics, data-quality issues,
+    business definitions, validated headline numbers, efficient query patterns, and how footfall
+    and bookings reconcile. Not in scope: F&B / retail sales, pricing strategy, anything not
+    about these datasets.
+  usage: >-
+    This memory is LIVE: during the hackathon many agents and people are adding findings at the same
+    time, and an organiser merges, corrects and supersedes them in the background. Check it often, not
+    just once: before each new sub-question, before running expensive queries on the source tables,
+    before stating a number or definition in an answer, and right before saving. Anything you read
+    earlier in your session may already be outdated.
+  contribute_when: >-
+    You established something another analyst would otherwise have to rediscover by querying:
+    a grain or join key you verified, what a code or sentinel value means, a data-quality problem,
+    a definition that matters for counting, a headline number you checked, or a query pattern that
+    is correct and fast. Save at most 2-3 findings per task, after the work is verified.
+  how_to_write: >-
+    One atomic, self-contained fact per finding. The title is one index line (what the finding is
+    about, <= 100 chars). The body states the fact with fully-qualified table and column names,
+    units, filters and the date the fact refers to, then the SQL that proves it when useful.
+    Search first. If an existing finding is wrong or outdated, save the corrected one with
+    supersedes=<its id>.
+  do_not_save: >-
+    Personal data (guest names, emails, phone numbers, individual guest or booking ids used as
+    examples), one-off answers to a single question, speculation without evidence, facts obvious
+    from one DESCRIBE TABLE, credentials.
+  sources:
+    - HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL
+    - HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS
+    - HAVEN_STORE.COMMON.DIM_PARK / DIM_CALENDAR and the ARRIVAL / HOLIDAY dimension tables
+    - HAVEN_DATA_SCIENCE_DEV.PETERZENTAI_LOCAL.FOOTFALL_ARRIVALS_SV_V3 (semantic view)
+
+contributors:
+  # Contributor identity = agent type (passed on every save). Any value is accepted; these are examples.
+  open: true
+  agent_types:
+    claude_code: Claude Code sessions and their subagents
+    arrivals_agent: Cortex ARRIVALS_AGENT
+    bookings_agent: Cortex BOOKINGS_AGENT
+    master_agent: Cortex HAVEN_MASTER_AGENT
+    human: A person recording a finding by hand
+
+schema:
+  categories:
+    data_structure: Grain, keys, joins and snapshot semantics of a table or view
+    definition: Business definitions and counting rules (what counts as an arrival, a live booking, a guest night)
+    data_quality: Known gaps, anomalies, sentinel values and lags, with their scope and dates
+    validated_metric: A checked headline number with its exact definition, filters and as_of_date
+    query_pattern: A proven, efficient SQL pattern for these tables
+    cross_domain: How footfall and bookings relate or reconcile
+    open_question: Something observed but not yet explained
+  tags:
+    open: true
+    max: 6
+    suggested: [arrivals, bookings, footfall, dim_park, snapshot, status, cancellations, grain, performance]
+  attributes:
+    tables:
+      type: list
+      required: false
+      description: Comma-separated fully-qualified tables/views the finding is about, e.g. HAVEN_STORE.ARRIVAL.FCT_PARK_ARRIVAL
+    confidence:
+      type: enum
+      values: [verified, likely, hypothesis]
+      required: true
+      description: "verified = checked with a query in this task; likely = strong indirect evidence; hypothesis = unconfirmed"
+    evidence_sql:
+      type: text
+      required: false
+      max_len: 4000
+      description: Optional SQL that proves or reproduces the finding
+  as_of_date: optional          # required | optional
+  limits:
+    title_max: 120
+    body_max: 3000
+  pii_patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '(\+44 ?7|07)[0-9]{3} ?[0-9]{6}'
+
+tools:
+  index:
+    name: findings_index
+    title: Footfall & bookings findings - index
+  search:
+    name: search_findings
+    title: Search footfall & bookings findings
+    extra: >-
+      Search before querying FCT_HOLIDAY_BOOKINGS (a ~4B-row daily snapshot table) or working out the
+      grain of FCT_PARK_ARRIVAL: the answer is often already here.
+  get:
+    name: get_findings
+    title: Get footfall & bookings findings by id
+  save:
+    name: record_finding
+    title: Record a footfall & bookings finding
+
+retrieval:
+  embed_model: snowflake-arctic-embed-l-v2.0
+  top_k_default: 8
+  top_k_max: 25
+  min_similarity: 0.35     # save: show similar existing findings above this cosine similarity
+  dup_threshold: 0.85      # save: flag as likely duplicate
+  search_floor: 0.2        # search: drop results below this score (cosine + keyword boost)
+  keyword_boost: 0.15
+
+toc:
+  section_item_limit: 30
+  show_unreviewed: true
+
+organiser:
+  model: claude-sonnet-5
+  on_insert:
+    enabled: true
+    batch_max: 20
+  cadence:
+    enabled: true
+    schedule: USING CRON 0 5 * * * Europe/London
+    budget_seconds: 600
+  review_after_days:
+    validated_metric: 90
+    data_quality: 60
+    open_question: 30
+  triage_prompt: |
+    Be strict about scope and durability: a finding must help a future analyst of the footfall or
+    bookings tables. Numbers must carry their definition and as_of date, otherwise rewrite them to
+    say what is missing or reject them. Prefer merging into an existing finding over keeping two
+    findings about the same table property. Titles must work as one line in an index: start with
+    the table or concept (e.g. "FCT_PARK_ARRIVAL grain: ...").
+  review_prompt: |
+    Keep the index scannable in one minute. Group related findings about the same table property
+    by merging them. validated_metric findings older than their review window are not wrong, but
+    must carry as_of_date; retire them only when a newer finding replaces them. Resolve open_question findings that later
+    findings answer: supersede them with the answering finding. In the overview, list the 3-5
+    most important things a new analyst of footfall and bookings must know first.
+
+deployment:
+  database: HAVEN_DATA_SCIENCE_DEV
+  schema: PETERZENTAI_LOCAL
+  warehouse: HAVEN_DATA_SCIENCE_DEV_WAREHOUSE_XSMALL
+  read_only_server: true
+  log_reads: true
+  usage_roles: []

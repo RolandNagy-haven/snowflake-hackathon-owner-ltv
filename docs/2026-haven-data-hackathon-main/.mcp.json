@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "mem-footfall-hackathon": {
+      "type": "stdio",
+      "command": ".venv/bin/python3",
+      "args": [
+        "invocation-poc/sf_mcp_proxy.py",
+        "https://bd78472.eu-west-1.snowflakecomputing.com/api/v2/databases/NEXUS_HACKATHON_DB/schemas/FOOTFALL_MEMORY/mcp-servers/FOOTFALL_BOOKINGS_MEMORY_MCP"
+      ],
+      "env": {
+        "SF_ROLE": "NEXUS_SPIKE"
+      }
+    }
+  }
+}

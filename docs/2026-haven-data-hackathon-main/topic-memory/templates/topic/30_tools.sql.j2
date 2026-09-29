@@ -1,0 +1,338 @@
+{% import "_macros.j2" as m with context -%}
+-- {{ t.name }} ({{ t.id }}): the four fast contributor tools, pure SQL Scripting (a Python
+-- procedure adds ~3.5 s per call). Owner's rights: callers need USAGE on these procedures (or on
+-- the MCP server), never DML on MEM_ITEM. Validation rules are rendered from the topic config.
+
+CREATE SEQUENCE IF NOT EXISTS {{ fq }}.{{ n.seq }} START = 1 INCREMENT = 1 ORDER;
+
+-- ---------------------------------------------------------------- save
+CREATE OR REPLACE PROCEDURE {{ fq }}.{{ n.save }}(
+    {{ save_params | map(attribute='decl') | join(',\n    ') }})
+RETURNS VARIANT
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+DECLARE
+    errs ARRAY DEFAULT ARRAY_CONSTRUCT();
+    tags_arr ARRAY;
+    bad ARRAY;
+{%- for a in list_attrs %}
+    attr_{{ a.name }} ARRAY;
+{%- endfor %}
+    n NUMBER;
+    new_id VARCHAR;
+    similar ARRAY;
+    dup BOOLEAN;
+BEGIN
+    -- ---- validation (all problems reported at once)
+    IF (LENGTH(TRIM(COALESCE(TITLE, ''))) = 0) THEN errs := ARRAY_APPEND(errs, 'title is required'); END IF;
+    IF (LENGTH(TRIM(COALESCE(TITLE, ''))) > {{ t.limits.title_max }}) THEN errs := ARRAY_APPEND(errs, 'title is longer than {{ t.limits.title_max }} characters'); END IF;
+    IF (LENGTH(TRIM(COALESCE(BODY, ''))) < 20) THEN errs := ARRAY_APPEND(errs, 'body is required (at least 20 characters)'); END IF;
+    IF (LENGTH(COALESCE(BODY, '')) > {{ t.limits.body_max }}) THEN errs := ARRAY_APPEND(errs, 'body is longer than {{ t.limits.body_max }} characters: split it into several {{ t.plural }}'); END IF;
+    IF (COALESCE(TRIM(CATEGORY), '') <> '' AND LOWER(TRIM(CATEGORY)) NOT IN ({{ t.categories | map(attribute='key') | map('sqlstr') | join(', ') }})) THEN
+        errs := ARRAY_APPEND(errs, 'category must be one of: {{ t.categories | map(attribute='key') | join(', ') }} (or leave it empty)');
+    END IF;
+{%- if t.as_of_required %}
+    IF (TRY_TO_DATE(TRIM(COALESCE(AS_OF_DATE, ''))) IS NULL) THEN errs := ARRAY_APPEND(errs, 'as_of_date is required (YYYY-MM-DD)'); END IF;
+{%- else %}
+    IF (COALESCE(TRIM(AS_OF_DATE), '') <> '' AND TRY_TO_DATE(TRIM(AS_OF_DATE)) IS NULL) THEN errs := ARRAY_APPEND(errs, 'as_of_date must be YYYY-MM-DD'); END IF;
+{%- endif %}
+
+    -- one round trip for the derived values (the sequence may skip numbers when validation fails: fine)
+    SELECT {{ m.csv_array(':TAGS') }},
+{%- for a in list_attrs %}
+           {{ m.csv_array(':' ~ a.param, lower=False) }},
+{%- endfor %}
+           IFF(COALESCE(TRIM(:SUPERSEDES), '') = '', 1, sup.C),
+           '{{ t.prefix }}-' || LPAD({{ fq }}.{{ n.seq }}.NEXTVAL::VARCHAR, 5, '0')
+      INTO :tags_arr{% for a in list_attrs %}, :attr_{{ a.name }}{% endfor %}, :n, :new_id
+      FROM (SELECT COUNT(*) AS C FROM {{ fq }}.MEM_ITEM
+             WHERE TOPIC_ID = '{{ t.id }}' AND ITEM_ID = UPPER(TRIM(:SUPERSEDES))) sup;  -- (a scalar subquery is not allowed with INTO)
+    IF (ARRAY_SIZE(tags_arr) > {{ t.tags.max }}) THEN errs := ARRAY_APPEND(errs, 'at most {{ t.tags.max }} tags'); END IF;
+{%- if not t.tags.open %}
+    SELECT ARRAY_EXCEPT(:tags_arr, {{ t.tags.suggested_sql }}) INTO :bad;
+    IF (ARRAY_SIZE(bad) > 0) THEN errs := ARRAY_APPEND(errs, 'unknown tags ' || ARRAY_TO_STRING(bad, ', ') || '; allowed: {{ t.tags.suggested | join(", ") }}'); END IF;
+{%- endif %}
+
+{%- for a in t.attributes %}
+{%- if a.type == 'list' %}
+{%- if a.required %}
+    IF (ARRAY_SIZE(attr_{{ a.name }}) = 0) THEN errs := ARRAY_APPEND(errs, '{{ a.name }} is required ({{ a.short }})'); END IF;
+{%- endif %}
+{%- elif a.type in ('number', 'boolean') %}
+{%- if a.required %}
+    IF ({{ a.param }} IS NULL) THEN errs := ARRAY_APPEND(errs, '{{ a.name }} is required ({{ a.short }})'); END IF;
+{%- endif %}
+{%- else %}
+{%- if a.required %}
+    IF (LENGTH(TRIM(COALESCE({{ a.param }}, ''))) = 0) THEN errs := ARRAY_APPEND(errs, '{{ a.name }} is required ({{ a.short }})'); END IF;
+{%- endif %}
+{%- if a.type == 'enum' %}
+    IF (LENGTH(TRIM(COALESCE({{ a.param }}, ''))) > 0 AND LOWER(TRIM({{ a.param }})) NOT IN ({{ a['values'] | map('sqlstr') | join(', ') }})) THEN
+        errs := ARRAY_APPEND(errs, '{{ a.name }} must be one of: {{ a['values'] | join(', ') }}');
+    END IF;
+{%- endif %}
+{%- endif %}
+{%- if a.max_len and a.type in ('text', 'list') %}
+    IF (LENGTH(COALESCE({{ a.param }}, '')) > {{ a.max_len }}) THEN errs := ARRAY_APPEND(errs, '{{ a.name }} is longer than {{ a.max_len }} characters'); END IF;
+{%- endif %}
+{%- endfor %}
+
+{%- for p in t.pii_patterns %}
+    IF (REGEXP_INSTR(COALESCE(TITLE, '') || ' ' || COALESCE(BODY, ''){% for a in t.attributes if a.type == 'text' %} || ' ' || COALESCE({{ a.param }}, ''){% endfor %}, {{ p | sqlstr }}) > 0) THEN
+        errs := ARRAY_APPEND(errs, 'the text looks like it contains personal data (pattern {{ loop.index }}): remove it');
+    END IF;
+{%- endfor %}
+
+    IF (n = 0) THEN errs := ARRAY_APPEND(errs, 'supersedes: no {{ t.noun }} with id ' || SUPERSEDES); END IF;
+
+    IF (ARRAY_SIZE(errs) > 0) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'errors', errs,
+                                'hint', 'Nothing was saved. Fix the problems above and call {{ t.tools.save.name }} again.');
+    END IF;
+
+    -- ---- store: item, its first history row and the event, in one statement (any agent_type is accepted;
+    --      an empty one is stored as 'unknown')
+    INSERT ALL
+        INTO {{ fq }}.MEM_ITEM (TOPIC_ID, ITEM_ID, TITLE, BODY, CATEGORY, TAGS, ATTRIBUTES, AS_OF_DATE, STATUS,
+                               SUPERSEDES, AGENT_TYPE, UPDATED_BY, EMBED_MODEL, EMBEDDING)
+             VALUES (T_ID, I_ID, TTL, BDY, CAT, TGS, ATTRS, ASOF, ST, SUP, AGT, ACTOR, MDL, EMB)
+        INTO {{ fq }}.MEM_ITEM_HISTORY (TOPIC_ID, ITEM_ID, REVISION, ACTOR, OPERATION, SNAPSHOT)
+             VALUES (T_ID, I_ID, REV, ACTOR, OP, SNAP)
+        INTO {{ fq }}.MEM_EVENT_LOG (TOPIC_ID, TOOL, AGENT_TYPE, DETAIL)
+             VALUES (T_ID, TOOL, AGT, DETAIL)
+    SELECT '{{ t.id }}' AS T_ID, :new_id AS I_ID, TRIM(:TITLE) AS TTL, TRIM(:BODY) AS BDY,
+           COALESCE(NULLIF(LOWER(TRIM(:CATEGORY)), ''), 'uncategorised') AS CAT,
+           :tags_arr AS TGS,
+           OBJECT_CONSTRUCT({% for a in t.attributes %}{{ a.name | sqlstr }}, {{ a.value_expr }}{% if not loop.last %},
+                            {% endif %}{% endfor %}) AS ATTRS,
+           TRY_TO_DATE(NULLIF(TRIM(:AS_OF_DATE), '')) AS ASOF, 'new' AS ST, NULLIF(UPPER(TRIM(:SUPERSEDES)), '') AS SUP,
+           COALESCE(NULLIF(LOWER(TRIM(:AGENT_TYPE)), ''), 'unknown') AS AGT, 'contributor:' || AGT AS ACTOR, '{{ t.retrieval.embed_model }}' AS MDL,
+           SNOWFLAKE.CORTEX.EMBED_TEXT_1024('{{ t.retrieval.embed_model }}',
+               {{ m.embed_text('TTL', 'CAT', 'TGS', 'BDY') }}) AS EMB,
+           1 AS REV, 'create' AS OP,
+           OBJECT_CONSTRUCT_KEEP_NULL('title', TTL, 'body', BDY, 'category', CAT, 'tags', TGS, 'attributes', ATTRS,
+                                      'as_of_date', ASOF, 'status', ST, 'status_reason', NULL, 'related_id', NULL,
+                                      'supersedes', SUP) AS SNAP,
+           'save' AS TOOL, OBJECT_CONSTRUCT('id', I_ID, 'category', CAT) AS DETAIL;
+
+    -- ---- nearest existing items (so the caller sees likely duplicates right away)
+    SELECT COALESCE(ARRAY_AGG(OBJECT_CONSTRUCT('id', ITEM_ID, 'title', TITLE, 'status', STATUS,
+                                               'similarity', ROUND(SIM, 3), 'likely_duplicate', SIM >= {{ t.retrieval.dup_threshold }}))
+                      WITHIN GROUP (ORDER BY SIM DESC), ARRAY_CONSTRUCT()),
+           COALESCE(MAX(SIM) >= {{ t.retrieval.dup_threshold }}, FALSE)
+      INTO :similar, :dup
+      FROM (SELECT o.ITEM_ID, o.TITLE, o.STATUS, VECTOR_COSINE_SIMILARITY(o.EMBEDDING, x.EMBEDDING) AS SIM
+              FROM {{ fq }}.MEM_ITEM o
+              JOIN {{ fq }}.MEM_ITEM x ON x.TOPIC_ID = o.TOPIC_ID AND x.ITEM_ID = :new_id
+             WHERE o.TOPIC_ID = '{{ t.id }}' AND o.ITEM_ID <> :new_id AND o.STATUS IN ('active', 'new', 'needs_review')
+            QUALIFY ROW_NUMBER() OVER (ORDER BY SIM DESC) <= 3)
+     WHERE SIM >= {{ t.retrieval.min_similarity }};
+
+    RETURN OBJECT_CONSTRUCT_KEEP_NULL(
+        'ok', TRUE, 'id', new_id, 'status', 'new',
+        'message', 'Saved. It is searchable now; the organiser reviews it shortly and may rewrite, merge or reject it.',
+        'similar_existing', similar,
+        'note', IFF(dup, 'A very similar {{ t.noun }} already exists. If it says the same thing, do not save again. If yours corrects it, nothing to do: the organiser will supersede the old one (pass supersedes=<id> next time).', NULL));
+END;
+$$;
+
+-- ---------------------------------------------------------------- search
+CREATE OR REPLACE PROCEDURE {{ fq }}.{{ n.search }}(
+    {{ search_params | map(attribute='decl') | join(',\n    ') }})
+RETURNS VARIANT
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+DECLARE
+    res ARRAY;
+BEGIN
+    IF (LENGTH(TRIM(COALESCE(QUERY, ''))) = 0) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'query is required');
+    END IF;
+    SELECT COALESCE(ARRAY_AGG(OBJECT_CONSTRUCT_KEEP_NULL(
+               'id', ITEM_ID, 'title', TITLE, 'category', CATEGORY,
+               'summary', IFF(LENGTH(BODY) > 280, LEFT(BODY, 277) || '...', BODY),
+               'tags', TAGS, 'as_of_date', AS_OF_DATE, 'reviewed', STATUS = 'active', 'score', ROUND(SCORE, 3)))
+             WITHIN GROUP (ORDER BY SCORE DESC), ARRAY_CONSTRUCT())
+      INTO :res
+      FROM (SELECT i.*,
+                   VECTOR_COSINE_SIMILARITY(i.EMBEDDING, SNOWFLAKE.CORTEX.EMBED_TEXT_1024('{{ t.retrieval.embed_model }}', :QUERY)) AS SIM,
+                   -- keyword boost: share of the query's words (>= 3 chars) that appear in the title or body;
+                   -- short keyword queries ("grain") embed poorly, so this keeps them findable
+                   SIM + {{ t.retrieval.keyword_boost }} * DIV0(
+                       ARRAY_SIZE(FILTER(SPLIT(REGEXP_REPLACE(LOWER(:QUERY), '[^a-z0-9_]+', ' '), ' '),
+                                         w -> LENGTH(w::VARCHAR) >= 3 AND CONTAINS(LOWER(i.TITLE || ' ' || i.BODY), w::VARCHAR))),
+                       ARRAY_SIZE(FILTER(SPLIT(REGEXP_REPLACE(LOWER(:QUERY), '[^a-z0-9_]+', ' '), ' '),
+                                         w -> LENGTH(w::VARCHAR) >= 3))) AS SCORE
+              FROM {{ fq }}.MEM_ITEM i
+             WHERE i.TOPIC_ID = '{{ t.id }}'
+               AND (i.STATUS = 'active' OR (COALESCE(:INCLUDE_UNREVIEWED, TRUE) AND i.STATUS IN ('new', 'needs_review')))
+               AND (COALESCE(TRIM(:CATEGORY), '') = '' OR i.CATEGORY = LOWER(TRIM(:CATEGORY)))
+               AND (COALESCE(TRIM(:TEXT_FILTER), '') = ''
+                    OR CONTAINS(LOWER(i.TITLE || ' ' || i.BODY || ' ' || COALESCE(i.ATTRIBUTES::VARCHAR, '') || ' '
+                                      || COALESCE(ARRAY_TO_STRING(i.TAGS, ' '), '')), LOWER(TRIM(:TEXT_FILTER))))
+            QUALIFY ROW_NUMBER() OVER (ORDER BY SCORE DESC) <= LEAST(GREATEST(COALESCE(:TOP_K, {{ t.retrieval.top_k_default }}), 1), {{ t.retrieval.top_k_max }})
+                AND (SCORE >= {{ t.retrieval.search_floor }} OR COALESCE(TRIM(:TEXT_FILTER), '') <> ''));
+{%- if t.log_reads %}
+    INSERT INTO {{ fq }}.MEM_EVENT_LOG (TOPIC_ID, TOOL, AGENT_TYPE, DETAIL)
+        SELECT '{{ t.id }}', 'search', NULLIF(LOWER(TRIM(:AGENT_TYPE)), ''),
+               OBJECT_CONSTRUCT('query', LEFT(:QUERY, 500), 'category', NULLIF(:CATEGORY, ''), 'text_filter', NULLIF(:TEXT_FILTER, ''),
+                                'hits', ARRAY_SIZE(:res));
+{%- endif %}
+    RETURN OBJECT_CONSTRUCT_KEEP_NULL('ok', TRUE, 'results', res,
+        'checked_at', TO_VARCHAR(CURRENT_TIMESTAMP(), 'YYYY-MM-DD HH24:MI:SS'),
+        'hint', IFF(ARRAY_SIZE(res) = 0,
+                    'No relevant {{ t.plural }} yet. Try other words or drop filters; other agents keep adding {{ t.plural }}, so search again later in your task.',
+                    'Use {{ t.tools['get'].name }} with the ids to read the full text. The memory changes in the background: search again for your next sub-question.'));
+END;
+$$;
+
+-- ---------------------------------------------------------------- get
+CREATE OR REPLACE PROCEDURE {{ fq }}.{{ n.get }}(
+    {{ get_params | map(attribute='decl') | join(',\n    ') }})
+RETURNS VARIANT
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+DECLARE
+    id_list ARRAY;
+    res ARRAY;
+    missing ARRAY;
+BEGIN
+    SELECT TRANSFORM({{ m.csv_array(':IDS', lower=False) }}, x -> UPPER(x::VARCHAR)) INTO :id_list;
+    IF (ARRAY_SIZE(id_list) = 0) THEN
+        RETURN OBJECT_CONSTRUCT('ok', FALSE, 'error', 'ids is required: comma-separated ids such as {{ t.prefix }}-00001');
+    END IF;
+    SELECT ARRAY_SLICE(:id_list, 0, 20) INTO :id_list;
+    SELECT COALESCE(ARRAY_AGG(OBJECT_CONSTRUCT_KEEP_NULL(
+               'id', i.ITEM_ID, 'title', i.TITLE, 'category', i.CATEGORY, 'body', i.BODY, 'tags', i.TAGS,
+               'attributes', i.ATTRIBUTES, 'as_of_date', i.AS_OF_DATE, 'status', i.STATUS,
+               'status_reason', i.STATUS_REASON, 'replaced_by', i.RELATED_ID, 'links', l.LINKS,
+               'contributed_by', i.AGENT_TYPE, 'created_at', TO_VARCHAR(i.CREATED_AT, 'YYYY-MM-DD HH24:MI'),
+               'updated_at', TO_VARCHAR(i.UPDATED_AT, 'YYYY-MM-DD HH24:MI'), 'revision', i.REVISION)), ARRAY_CONSTRUCT())
+      INTO :res
+      FROM {{ fq }}.MEM_ITEM i
+      LEFT JOIN (SELECT FROM_ID, ARRAY_AGG(OBJECT_CONSTRUCT('relation', RELATION, 'id', TO_ID)) AS LINKS
+                   FROM {{ fq }}.MEM_LINK WHERE TOPIC_ID = '{{ t.id }}' GROUP BY FROM_ID) l ON l.FROM_ID = i.ITEM_ID
+     WHERE i.TOPIC_ID = '{{ t.id }}' AND ARRAY_CONTAINS(i.ITEM_ID::VARIANT, :id_list);
+    SELECT ARRAY_EXCEPT(:id_list, TRANSFORM(:res, x -> x:id)) INTO :missing;
+{%- if t.log_reads %}
+    INSERT INTO {{ fq }}.MEM_EVENT_LOG (TOPIC_ID, TOOL, AGENT_TYPE, DETAIL)
+        SELECT '{{ t.id }}', 'get', NULLIF(LOWER(TRIM(:AGENT_TYPE)), ''), OBJECT_CONSTRUCT('ids', :id_list);
+{%- endif %}
+    RETURN OBJECT_CONSTRUCT_KEEP_NULL('ok', TRUE, '{{ t.plural }}', res, 'not_found', IFF(ARRAY_SIZE(missing) = 0, NULL, missing));
+END;
+$$;
+
+-- ---------------------------------------------------------------- index (table of contents)
+-- (the 2-argument version predates the SINCE argument: drop it so the MCP tool doesn't hit an overload)
+DROP PROCEDURE IF EXISTS {{ fq }}.{{ n.index }}(VARCHAR, VARCHAR);
+CREATE OR REPLACE PROCEDURE {{ fq }}.{{ n.index }}(
+    {{ index_params | map(attribute='decl') | join(',\n    ') }})
+RETURNS VARCHAR
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+$$
+DECLARE
+    cat VARCHAR DEFAULT LOWER(TRIM(COALESCE(CATEGORY, '')));
+    ov VARCHAR;
+    ov_at VARCHAR;
+    n_active NUMBER;
+    n_new NUMBER;
+    sections VARCHAR;
+    out VARCHAR;
+    checked VARCHAR;
+    since_ts TIMESTAMP_LTZ;
+    n_recent NUMBER;
+    delta VARCHAR;
+BEGIN
+    SELECT TO_VARCHAR(CURRENT_TIMESTAMP(), 'YYYY-MM-DD HH24:MI:SS') INTO :checked;
+
+    -- ---- since mode: only what was added or changed after a point in time (cheap "what's new" re-check)
+    IF (COALESCE(TRIM(SINCE), '') <> '') THEN
+        SELECT CASE WHEN REGEXP_LIKE(LOWER(TRIM(:SINCE)), '[0-9]+[mhd]') THEN
+                        CASE RIGHT(LOWER(TRIM(:SINCE)), 1)
+                            WHEN 'm' THEN DATEADD(minute, -TO_NUMBER(LEFT(TRIM(:SINCE), LENGTH(TRIM(:SINCE)) - 1)), CURRENT_TIMESTAMP())
+                            WHEN 'h' THEN DATEADD(hour, -TO_NUMBER(LEFT(TRIM(:SINCE), LENGTH(TRIM(:SINCE)) - 1)), CURRENT_TIMESTAMP())
+                            ELSE DATEADD(day, -TO_NUMBER(LEFT(TRIM(:SINCE), LENGTH(TRIM(:SINCE)) - 1)), CURRENT_TIMESTAMP())
+                        END
+                    ELSE TRY_TO_TIMESTAMP_LTZ(TRIM(:SINCE)) END
+          INTO :since_ts;
+        IF (since_ts IS NULL) THEN
+            RETURN 'since must be a checked_at value (YYYY-MM-DD HH24:MI:SS) or a duration such as 30m, 2h, 1d.';
+        END IF;
+        SELECT LISTAGG('- ' || ITEM_ID || ' [' || IFF(CREATED_AT >= :since_ts, 'added', 'changed') || ', '
+                       || CASE STATUS WHEN 'active' THEN 'reviewed'
+                                      WHEN 'new' THEN 'unreviewed'
+                                      WHEN 'needs_review' THEN 'unreviewed, flagged'
+                                      WHEN 'merged' THEN 'merged into ' || RELATED_ID || ': read that instead'
+                                      WHEN 'superseded' THEN 'superseded by ' || RELATED_ID || ': read that instead'
+                                      ELSE STATUS || ': do not use' END
+                       || '] ' || CATEGORY || ': ' || TITLE
+                       || IFF(AS_OF_DATE IS NULL, '', ' (as of ' || TO_VARCHAR(AS_OF_DATE) || ')')
+                       || ' @ ' || TO_VARCHAR(UPDATED_AT, 'MM-DD HH24:MI'), '\n')
+                 WITHIN GROUP (ORDER BY UPDATED_AT DESC),
+               COUNT(*)
+          INTO :delta, :n_recent
+          FROM (SELECT * FROM {{ fq }}.MEM_ITEM
+                 WHERE TOPIC_ID = '{{ t.id }}' AND UPDATED_AT >= :since_ts AND (:cat = '' OR CATEGORY = :cat)
+                   -- added and rejected inside the window: nobody should have relied on it, so it is noise here
+                   AND NOT (STATUS IN ('rejected', 'retired') AND CREATED_AT >= :since_ts)
+                QUALIFY ROW_NUMBER() OVER (ORDER BY UPDATED_AT DESC) <= 100);
+        out := '# {{ t.name }}: changes since ' || TO_VARCHAR(since_ts, 'YYYY-MM-DD HH24:MI:SS')
+            || '\nchecked_at: ' || checked || '  (pass it as since= next time)\n\n'
+            || IFF(n_recent = 0, 'Nothing added or changed.',
+                   n_recent || ' {{ t.plural }} added or changed, newest first. Read them with {{ t.tools.get.name }}:\n' || delta);
+{%- if t.log_reads %}
+        INSERT INTO {{ fq }}.MEM_EVENT_LOG (TOPIC_ID, TOOL, AGENT_TYPE, DETAIL)
+            SELECT '{{ t.id }}', 'index', NULLIF(LOWER(TRIM(:AGENT_TYPE)), ''),
+                   OBJECT_CONSTRUCT('since', TRIM(:SINCE), 'category', NULLIF(:cat, ''), 'changes', :n_recent);
+{%- endif %}
+        RETURN out;
+    END IF;
+
+    SELECT MAX_BY(OVERVIEW, GENERATED_AT), TO_VARCHAR(MAX(GENERATED_AT), 'YYYY-MM-DD')
+      INTO :ov, :ov_at FROM {{ fq }}.MEM_TOC WHERE TOPIC_ID = '{{ t.id }}';
+    SELECT COUNT_IF(STATUS = 'active'), COUNT_IF(STATUS IN ('new', 'needs_review')),
+           COUNT_IF(UPDATED_AT >= DATEADD(hour, -24, CURRENT_TIMESTAMP()))
+      INTO :n_active, :n_new, :n_recent FROM {{ fq }}.MEM_ITEM WHERE TOPIC_ID = '{{ t.id }}';
+
+    SELECT LISTAGG(SECTION, '\n\n') WITHIN GROUP (ORDER BY ORD)
+      INTO :sections
+      FROM (SELECT ORD, '## ' || CATEGORY || ': ' || CAT_DESC || ' (' || MAX(TOTAL) || ')\n'
+                   || LISTAGG(LINE, '\n') WITHIN GROUP (ORDER BY RN)
+                   || IFF(MAX(TOTAL) > MAX(RN), '\n- ... ' || (MAX(TOTAL) - MAX(RN)) || ' more: call with category=' || CATEGORY || ' or use {{ t.tools.search.name }}', '') AS SECTION
+              FROM (SELECT CATEGORY,
+                           CASE CATEGORY {% for c in t.categories %}WHEN {{ c.key | sqlstr }} THEN {{ loop.index }} {% endfor %}ELSE 999 END AS ORD,
+                           CASE CATEGORY {% for c in t.categories %}WHEN {{ c.key | sqlstr }} THEN {{ c.desc | sqlstr }} {% endfor %}ELSE '' END AS CAT_DESC,
+                           '- ' || ITEM_ID || ' ' || TITLE || IFF(AS_OF_DATE IS NULL, '', ' (as of ' || TO_VARCHAR(AS_OF_DATE) || ')')
+                               || IFF(STATUS = 'active', '', ' [unreviewed]') AS LINE,
+                           ROW_NUMBER() OVER (PARTITION BY CATEGORY ORDER BY IFF(STATUS = 'active', 0, 1), UPDATED_AT DESC) AS RN,
+                           COUNT(*) OVER (PARTITION BY CATEGORY) AS TOTAL
+                      FROM {{ fq }}.MEM_ITEM
+                     WHERE TOPIC_ID = '{{ t.id }}'
+                       AND STATUS IN ('active'{% if t.toc.show_unreviewed %}, 'new', 'needs_review'{% endif %})
+                       AND (:cat = '' OR CATEGORY = :cat)
+                    QUALIFY RN <= IFF(:cat = '', {{ t.toc.section_item_limit }}, 500))
+             GROUP BY ORD, CATEGORY, CAT_DESC);
+
+    out := {{ t.index_header | sqlstr }}
+        || IFF(ov IS NULL, '', '\n\n## Overview (organiser, ' || ov_at || ')\n' || ov)
+        || '\n\n# Index: ' || n_active || ' active, ' || n_new || ' awaiting organiser review'
+        || IFF(n_new > 0, ' (marked [unreviewed]: usable, but not yet checked)', '')
+        || '\nchecked_at: ' || checked || ' - ' || n_recent || ' {{ t.plural }} added or changed in the last 24 h. '
+        || 'This is a snapshot: other agents keep writing. Re-check with since=<checked_at>, and search before each new sub-question.'
+        || '\n\n' || COALESCE(sections, IFF(cat = '', '(No {{ t.plural }} yet. Be the first: see "Contribute when" above.)',
+                                            '(No {{ t.plural }} in category ' || cat || '.)'));
+{%- if t.log_reads %}
+    INSERT INTO {{ fq }}.MEM_EVENT_LOG (TOPIC_ID, TOOL, AGENT_TYPE, DETAIL)
+        SELECT '{{ t.id }}', 'index', NULLIF(LOWER(TRIM(:AGENT_TYPE)), ''), OBJECT_CONSTRUCT('category', NULLIF(:cat, ''));
+{%- endif %}
+    RETURN out;
+END;
+$$;

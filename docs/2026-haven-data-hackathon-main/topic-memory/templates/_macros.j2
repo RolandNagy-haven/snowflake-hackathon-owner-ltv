@@ -1,0 +1,27 @@
+{#- Shared SQL fragments. -#}
+
+{#- EMBED_TEXT_1024 wants a constant model name; with a per-row model, dispatch over the supported ones. -#}
+{% macro embed(model_expr, text_expr) -%}
+CASE {{ model_expr }}
+{%- for m in embed_models %}
+            WHEN '{{ m }}' THEN SNOWFLAKE.CORTEX.EMBED_TEXT_1024('{{ m }}', {{ text_expr }})
+{%- endfor %}
+        END
+{%- endmacro %}
+
+{#- Text that gets embedded for an item (title, category and tags steer the vector as much as the body). -#}
+{% macro embed_text(title, category, tags, body) -%}
+{{ title }} || '\n' || {{ category }} || '\n' || COALESCE(ARRAY_TO_STRING({{ tags }}, ', '), '') || '\n' || {{ body }}
+{%- endmacro %}
+
+{#- Comma-separated string -> distinct, lower-cased, trimmed, non-empty array. -#}
+{% macro csv_array(expr, lower=True) -%}
+ARRAY_DISTINCT(FILTER(TRANSFORM(SPLIT(COALESCE({{ expr }}, ''), ','), x -> {% if lower %}LOWER(TRIM(x::VARCHAR)){% else %}TRIM(x::VARCHAR){% endif %}), x -> x <> ''))
+{%- endmacro %}
+
+{#- Item state for MEM_ITEM_HISTORY.SNAPSHOT (no embedding). -#}
+{% macro snapshot() -%}
+OBJECT_CONSTRUCT_KEEP_NULL('title', TITLE, 'body', BODY, 'category', CATEGORY, 'tags', TAGS,
+               'attributes', ATTRIBUTES, 'as_of_date', AS_OF_DATE, 'status', STATUS,
+               'status_reason', STATUS_REASON, 'related_id', RELATED_ID, 'supersedes', SUPERSEDES)
+{%- endmacro %}

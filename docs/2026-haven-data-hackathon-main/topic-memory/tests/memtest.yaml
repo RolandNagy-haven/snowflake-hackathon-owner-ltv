@@ -1,0 +1,18 @@
+# Scratch topic for tests/organiser_eval.py: the footfall_bookings config with its own id, tasks off.
+# Deployed and purged by the eval; do not use it for real findings.
+extends: ../topics/footfall_bookings.yaml
+topic:
+  id: memtest
+  name: memtest organiser eval (scratch)
+  id_prefix: MT
+tools:
+  index: {name: memtest_index}
+  search: {name: search_memtest}
+  get: {name: get_memtest}
+  save: {name: record_memtest}
+organiser:
+  on_insert: {enabled: false}     # the eval calls MEM_ORGANISE itself
+  cadence: {enabled: false}
+deployment:
+  read_only_server: false
+  log_reads: false

@@ -1,0 +1,27 @@
+-- topic-memory organiser procedures (Python, owner's rights; code in templates/core/organiser.py).
+--   MEM_ORGANISE(topic, trigger): triage items in status 'new' (per-insert triggered task, or manual)
+--   MEM_REVIEW(topic):            triage leftovers, then run the topic's organiser agent (cron task)
+
+CREATE OR REPLACE PROCEDURE {{ fq }}.MEM_ORGANISE(TOPIC_ID VARCHAR, TRIGGER_KIND VARCHAR)
+RETURNS VARCHAR
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.11'
+PACKAGES = ('snowflake-snowpark-python')
+HANDLER = 'organise_handler'
+EXECUTE AS OWNER
+AS
+$$
+{% include "core/organiser.py" %}
+$$;
+
+CREATE OR REPLACE PROCEDURE {{ fq }}.MEM_REVIEW(TOPIC_ID VARCHAR)
+RETURNS VARCHAR
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.11'
+PACKAGES = ('snowflake-snowpark-python')
+HANDLER = 'review_handler'
+EXECUTE AS OWNER
+AS
+$$
+{% include "core/organiser.py" %}
+$$;

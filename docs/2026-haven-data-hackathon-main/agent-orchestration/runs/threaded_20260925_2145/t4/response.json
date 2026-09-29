@@ -1,0 +1,95 @@
+{
+ "content": [
+  {
+   "thinking": {
+    "text": "Continue bookings thread \u2014 comparison to 2025 at the same point last year (as at 2025-09-25). Same definitions."
+   },
+   "type": "thinking"
+  },
+  {
+   "tool_use": {
+    "client_side_execute": false,
+    "input": {
+     "question": "Now compute the same cancellation rate for the 2025 season as at the equivalent point last year \u2014 the snapshot of 2025-09-25 (SEASON = 2025). Use exactly the same definitions as you used for 2026 (cancellation rate = cancelled \u00f7 (firm + cancelled), offers excluded). Please return the 2025 firm bookings, cancelled bookings, total, and cancellation rate so I can compare with the 5.68% figure for 2026.",
+     "thread_ref": "2862161133:187574107712562"
+    },
+    "name": "ask_bookings_agent",
+    "tool_use_id": "toolu_bdrk_01GHv58ZbGFz8Av5aJhwV4HM",
+    "type": "generic"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "json": {
+       "execution_type": "procedure",
+       "query_id": "01c75081-030c-66f0-00aa-9901ed95bc6f",
+       "result": "{\"agent\": \"HAVEN_DATA_SCIENCE_DEV.PETERZENTAI_LOCAL.BOOKINGS_AGENT\", \"answer\": \"Here's the 2025 comparison alongside the 2026 figure you already have.\\n\\n## Cancellation Rate Comparison \\u2014 2025 vs 2026 Season (like-for-like snapshots)\\n\\n| Metric | 2025 (as at 25 Sep 2025) | 2026 (as at 25 Sep 2026) | Change |\\n|---|---|---|---|\\n| **Firm bookings** | 957,647 | 1,039,538 | +81,891 (+8.5%) |\\n| **Cancelled bookings** | 65,804 | 62,633 | \\u22123,171 (\\u22124.8%) |\\n| **Total booked (Firm + Cancelled)** | 1,023,451 | 1,102,171 | +78,720 (+7.7%) |\\n| **Cancellation rate** | **6.43%** | **5.68%** | **\\u22120.75 pp** |\\n\\n### Key takeaways\\n\\n- The 2026 season cancellation rate is **0.75 percentage points lower** than the equivalent point last year.\\n- This is driven by *both* sides: more firm bookings (+8.5%) *and* fewer cancellations (\\u22124.8%) in absolute terms.\\n- Definitions are identical across both years: same status-category logic, offers excluded, volume-based (row count per `BOOKING_ID`).\", \"thread_ref\": \"2862161133:187574107714626\", \"tools_used\": [\"snowflake_sql_execute\"], \"elapsed_s\": 28.8}",
+       "truncated": false
+      },
+      "type": "json"
+     }
+    ],
+    "name": "ask_bookings_agent",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_01GHv58ZbGFz8Av5aJhwV4HM",
+    "type": "generic"
+   },
+   "type": "tool_result"
+  },
+  {
+   "thinking": {
+    "text": "Present comparison."
+   },
+   "type": "thinking"
+  },
+  {
+   "text": "\n\nThe 2026 season is running below last year: the cancellation rate is **5.68%**, down **0.75 percentage points** from **6.43%** at the same point in the 2025 season.\n\n| Metric | 2025 (as at 25 Sep 2025) | 2026 (as at 25 Sep 2026) | Change |\n|---|---:|---:|---:|\n| Firm bookings | 957,647 | 1,039,538 | +81,891 (+8.5%) |\n| Cancelled bookings | 65,804 | 62,633 | \u22123,171 (\u22124.8%) |\n| Total (firm + cancelled) | 1,023,451 | 1,102,171 | +78,720 (+7.7%) |\n| Cancellation rate | 6.43% | 5.68% | \u22120.75 pp |\n\nThe improvement comes from both sides \u2014 more firm bookings (+8.5%) and fewer cancellations in absolute terms (\u22124.8%).\n\n**Basis (Bookings specialist):** Like-for-like snapshots (25 Sep each year); rate = cancelled \u00f7 (firm + cancelled) by booking volume, offers excluded; identical definitions across both seasons.",
+   "type": "text"
+  },
+  {
+   "suggested_queries": [
+    {
+     "query": "How does the 2026 cancellation rate break down by booking channel?"
+    },
+    {
+     "query": "Which parks have the highest and lowest cancellation rates for the 2026 season so far?"
+    },
+    {
+     "query": "How has the 2026 cancellation rate trended month by month across the season so far?"
+    }
+   ],
+   "type": "suggested_queries"
+  }
+ ],
+ "metadata": {
+  "assistant_message_id": 187574107714630,
+  "run_id": "2862161125-187574107709018",
+  "thread_id": 2862161125,
+  "usage": {
+   "tokens_consumed": [
+    {
+     "context_window": 1000000,
+     "input_tokens": {
+      "cache_read": 67035,
+      "cache_write": 4562,
+      "total": 71603,
+      "uncached": 6
+     },
+     "model_name": "claude-opus-4-8",
+     "model_role": "orchestration",
+     "output_tokens": {
+      "total": 827
+     }
+    }
+   ]
+  },
+  "user_message_id": 187574107709018
+ },
+ "role": "assistant",
+ "schema_version": "v2",
+ "sequence_number": 88,
+ "status": "completed"
+}

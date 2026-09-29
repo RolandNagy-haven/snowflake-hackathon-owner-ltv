@@ -1,0 +1,396 @@
+{
+ "content": [
+  {
+   "thinking": {
+    "signature": "EqcCCnMIEhABGAIqQCaU8zA6WuqSEkQq1pe+ol1RwkSdMiZWZHlUe9WEgbT767Ag9EqAHi1JFzftMVDhVQsba2D0OHPtChyJwoOfNPwyD2NsYXVkZS1vcHVzLTQtNjgAQgh0aGlua2luZ1oMNjU0NjU0NTAwODQ0EgyKMvrxzblaV0xYXT0aDHWlAnLmdF8aHRBoViIwveNBK9sEt70+xSYAIIsKVR4+PQygu0owXg4gdGr0h/IaN6hhdK6s1V0Os9dmFo85KmJGzNJ+fzaDOm77Sfw9VrmFAXXIcG9RCNgfXdrB41FBQih4glPmKKebcJg+DimTvMQR1HK3WoLr9r581xaQu5WgXzP+RO5y6eXryl3IgVwLn31Iwp+hE9SwJADLCHxWfhGD7BgB",
+    "text": "Let me start by recalling what we know about bookings data, then build the query."
+   },
+   "type": "thinking"
+  },
+  {
+   "text": "Let me check what we already know about status codes and join keys, then build the comparison query.",
+   "type": "text"
+  },
+  {
+   "tool_use": {
+    "client_side_execute": false,
+    "input": {
+     "request": "RECALL bookings: live not cancelled booking status, BOOKING_STATUS_XID meaning, how to identify cancelled bookings, DIM_BOOKING_STATUS join key, DIM_PARK join key"
+    },
+    "name": "ask_knowledge_assistant",
+    "tool_use_id": "toolu_bdrk_01KUSLfd55yxK9LZkennjRky",
+    "type": "generic"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "json": {
+       "execution_type": "procedure",
+       "query_id": "01c75051-030c-6701-00aa-9901ed941ed7",
+       "result": "{\"agent\": \"HAVEN_DATA_SCIENCE_DEV.PETERZENTAI_LOCAL.KNOWLEDGE_AGENT\", \"answer\": \"No relevant notes.\\n\\n(No bookings-domain notes exist on booking status codes, BOOKING_STATUS_XID, cancelled-booking identification, or DIM_BOOKING_STATUS/DIM_PARK join keys for the bookings fact tables. The only nearby note is an arrivals-domain DIM_PARK join to FCT_PARK_ARRIVAL \\u2014 off-topic here and below the relevance threshold.)\", \"tools_used\": [\"recall_observations\", \"recall_observations\", \"recall_observations\"], \"elapsed_s\": 22.3}",
+       "truncated": false
+      },
+      "type": "json"
+     }
+    ],
+    "name": "ask_knowledge_assistant",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_01KUSLfd55yxK9LZkennjRky",
+    "type": "generic"
+   },
+   "type": "tool_result"
+  },
+  {
+   "text": "No prior notes on status codes or join keys. Let me explore the dimension tables to understand how to filter live bookings and join parks.",
+   "type": "text"
+  },
+  {
+   "tool_use": {
+    "classification": {
+     "reasons": [
+      "Read-only SQL"
+     ],
+     "risk_level": "RISK_LEVEL_NONE",
+     "sql": {
+      "statements": [
+       {
+        "category": "CATEGORY_READ_ONLY",
+        "statement": "DESCRIBE TABLE HAVEN_STORE.COMMON.DIM_PARK",
+        "statement_type": "STATEMENT_TYPE_OTHER",
+        "target_role": "",
+        "write_database_name": "",
+        "write_schema_name": ""
+       }
+      ]
+     }
+    },
+    "client_side_execute": false,
+    "input": {
+     "description": "Get DIM_PARK columns",
+     "sql": "DESCRIBE TABLE HAVEN_STORE.COMMON.DIM_PARK"
+    },
+    "name": "snowflake_sql_execute",
+    "tool_use_id": "toolu_bdrk_01KFqKYfKwELy3iGdbXJb7Ys",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_use": {
+    "classification": {
+     "reasons": [
+      "Read-only SQL"
+     ],
+     "risk_level": "RISK_LEVEL_NONE",
+     "sql": {
+      "statements": [
+       {
+        "category": "CATEGORY_READ_ONLY",
+        "statement": "DESCRIBE TABLE HAVEN_STORE.HOLIDAY.DIM_BOOKING_STATUS",
+        "statement_type": "STATEMENT_TYPE_OTHER",
+        "target_role": "",
+        "write_database_name": "",
+        "write_schema_name": ""
+       }
+      ]
+     }
+    },
+    "client_side_execute": false,
+    "input": {
+     "description": "Get DIM_BOOKING_STATUS columns",
+     "sql": "DESCRIBE TABLE HAVEN_STORE.HOLIDAY.DIM_BOOKING_STATUS"
+    },
+    "name": "snowflake_sql_execute",
+    "tool_use_id": "toolu_bdrk_018DPWJi7rzh4HfBvgPsRCKj",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "text": "16 row(s) returned.\n\nname,type,kind,null?,default,primary key,unique key,check,expression,comment,policy name,write default\n\nPARK_XID,VARCHAR(32),COLUMN,Y,None,N,N,None,None,unique key for parks,None,None\nPARK_CODE,VARCHAR(8),COLUMN,Y,None,N,N,None,None,,None,None\nPARK_NAME,VARCHAR(80),COLUMN,Y,None,N,N,None,None,,None,None\nPARK_CLUSTER_CODE,VARCHAR(8),COLUMN,Y,None,N,N,None,None,,None,None\nPARK_CLUSTER_NAME,VARCHAR(80),COLUMN,Y,None,N,N,None,None,,None,None\nPARK_SIZING,VARCHAR(16777216),COLUMN,Y,None,N,N,None,None,,None,None\nDIRECTOR_NAME,VARCHAR(400),COLUMN,Y,None,N,N,None,None,,None,None\nDIRECTOR_REGION,VARCHAR(16777216),COLUMN,Y,None,N,N,None,None,,None,None\nLONGITUDE,FLOAT,COLUMN,Y,None,N,N,None,None,,None,None\nLATITUDE,FLOAT,COLUMN,Y,None,N,N,None,None,,None,None\nCARAVAN_SALES_REGION_CODE,VARCHAR(16777216),COLUMN,Y,None,N,N,None,None,,None,None\nCARAVAN_SALES_REGION_NAME,VARCHAR(17),COLUMN,Y,None,N,N,None,None,,None,None\nPITCH_STRATEGY_GROUP,VARCHAR(16777216),COLUMN,Y,None,N,N,None,None,,None,None\nPARK_OPENED_DATE,DATE,COLUMN,Y,None,N,N,None,None,,None,None\nOWNER_LETTING_PARK,VARCHAR(1),COLUMN,Y,None,N,N,None,None,,None,None\nARCADES_PARTNER,VARCHAR(10),COLUMN,Y,None,N,N,None,None,,None,None",
+      "type": "text"
+     }
+    ],
+    "name": "snowflake_sql_execute",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_01KFqKYfKwELy3iGdbXJb7Ys",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_result"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "text": "9 row(s) returned.\n\nname,type,kind,null?,default,primary key,unique key,check,expression,comment,policy name,write default\n\nBOOKING_STATUS_XID,VARCHAR(32),COLUMN,Y,None,N,N,None,None,None,None,None\nBOOKING_STATUS_ID,\"NUMBER(9,0)\",COLUMN,Y,None,N,N,None,None,None,None,None\nBOOKING_STATUS_CODE,VARCHAR(8),COLUMN,Y,None,N,N,None,None,None,None,None\nBOOKING_STATUS_NAME,VARCHAR(80),COLUMN,Y,None,N,N,None,None,None,None,None\nBOOKING_STATUS_DESCRIPTION,VARCHAR(3060),COLUMN,Y,None,N,N,None,None,None,None,None\nCANCELLATION_CASE_ID,\"NUMBER(9,0)\",COLUMN,Y,None,N,N,None,None,None,None,None\nBOOKING_SUB_STATUS_NAME,VARCHAR(120),COLUMN,Y,None,N,N,None,None,None,None,None\nBOOKING_SUB_STATUS_DESCRIPTION,VARCHAR(3060),COLUMN,Y,None,N,N,None,None,None,None,None\nBOOKING_STATUS_CATEGORY,VARCHAR(9),COLUMN,Y,None,N,N,None,None,None,None,None",
+      "type": "text"
+     }
+    ],
+    "name": "snowflake_sql_execute",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_018DPWJi7rzh4HfBvgPsRCKj",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_result"
+  },
+  {
+   "text": "Good \u2014 `BOOKING_STATUS_CATEGORY` looks promising, and parks join on `PARK_XID`. Let me check the status categories and confirm the latest snapshot date.",
+   "type": "text"
+  },
+  {
+   "tool_use": {
+    "classification": {
+     "reasons": [
+      "Read-only SQL"
+     ],
+     "risk_level": "RISK_LEVEL_NONE",
+     "sql": {
+      "statements": [
+       {
+        "category": "CATEGORY_READ_ONLY",
+        "statement": "SELECT MAX(SNAPSHOT_DATE) AS latest_snapshot FROM HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS",
+        "statement_type": "STATEMENT_TYPE_SELECT",
+        "target_role": "",
+        "write_database_name": "",
+        "write_schema_name": ""
+       }
+      ]
+     }
+    },
+    "client_side_execute": false,
+    "input": {
+     "description": "Get latest snapshot date",
+     "sql": "SELECT MAX(SNAPSHOT_DATE) AS latest_snapshot FROM HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS"
+    },
+    "name": "snowflake_sql_execute",
+    "tool_use_id": "toolu_bdrk_01XwcmLCnGD4BW2wgEgEhTUp",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_use": {
+    "classification": {
+     "reasons": [
+      "Read-only SQL"
+     ],
+     "risk_level": "RISK_LEVEL_NONE",
+     "sql": {
+      "statements": [
+       {
+        "category": "CATEGORY_READ_ONLY",
+        "statement": "SELECT BOOKING_STATUS_CATEGORY, BOOKING_STATUS_NAME, COUNT(*) AS cnt FROM HAVEN_STORE.HOLIDAY.DIM_BOOKING_STATUS GROUP BY 1, 2 ORDER BY 1, 2",
+        "statement_type": "STATEMENT_TYPE_SELECT",
+        "target_role": "",
+        "write_database_name": "",
+        "write_schema_name": ""
+       }
+      ]
+     }
+    },
+    "client_side_execute": false,
+    "input": {
+     "description": "List all booking status categories",
+     "sql": "SELECT BOOKING_STATUS_CATEGORY, BOOKING_STATUS_NAME, COUNT(*) cnt\nFROM HAVEN_STORE.HOLIDAY.DIM_BOOKING_STATUS\nGROUP BY 1,2 ORDER BY 1,2"
+    },
+    "name": "snowflake_sql_execute",
+    "tool_use_id": "toolu_bdrk_01QeEbQAeEth8jCW3u4Dfkd1",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "text": "1 row(s) returned.\n\nLATEST_SNAPSHOT\n\n\"\"\"2026-09-25\"\"\"",
+      "type": "text"
+     }
+    ],
+    "name": "snowflake_sql_execute",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_01XwcmLCnGD4BW2wgEgEhTUp",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_result"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "text": "10 row(s) returned.\n\nBOOKING_STATUS_CATEGORY,BOOKING_STATUS_NAME,CNT\n\nCANCELLED,CANCELED,31\nCANCELLED,CANCELED&TERMINATED,31\nFIRM,BOOKED,1\nFIRM,CLOSED,1\nFIRM,TERMINATED,1\nNo Match,No Match,1\nOFFER,OFFER,1\nOFFER,QUOTE,1\nOFFER,SHOPPING,1\nOFFER,WAITLIST,1",
+      "type": "text"
+     }
+    ],
+    "name": "snowflake_sql_execute",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_01QeEbQAeEth8jCW3u4Dfkd1",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_result"
+  },
+  {
+   "thinking": {
+    "signature": "EoMICnMIEhABGAIqQCPo19RI4OctVbCQ8LEemPg9HvvoHzs7wIob9+Fvh4tDGcI1KD6XNId9wknJh1sTlEsfrK5IyJJuaB6CO+a65BgyD2NsYXVkZS1vcHVzLTQtNjgAQgh0aGlua2luZ1oMNjU0NjU0NTAwODQ0Egz5K/+Q63MAmc1AWc4aDCfWVqYbeYLAM7nFPyIwXEJVSKKfiOQzPIv1BBkI8OwzAj6pEFs//Um4sELmwWF+Ea/Kr0N9/YmNHP6aE96mKr0GZkH23x5xRhdJU1FlR2DKhVwD0+ZMlqdn9LLsyXj0svsn8vdxkE/Cr/XcN23LO0Bef5SaMD/NSUmPQ1hX/z9r1EgXTaT9YJ27vlCVECPwNrR7cP6yNUV3mwR58p1Cjhiln+0Lzl//Fy8Oymmzy/QAq7nPh9l+JOM1yopG1Dv5wrCIGapZ6F0qD+mal5pWcBeRMM2+giSNDzfok3siR1PiRGFxXsIDXQZ7sOX2OQFGx5s1fQ/qM9hi13VLrpK6dKTJ376jgRwHU8at06bn6uJbll/TBxmC9Tuv7tiCVCbLjW/4wFDSBgYx7VHH4Egw6IE53U/SMvkEOWbK3fF7YeUTcQa9D5agyHvEwSMQRvEImtDrkYKJHDxUUIIb145isND6b1pD684DQdqmw4QaCauHS0tWXSGogMbLY/qaWBRSWqlhgdVPym/DJiXd7cEPaen+m+NPMlp1Vd73+U9ouJKX2dLOLnoD9nhRjn8+zk/LRidiO/9DsIoWsfMwtd0rrcTYzp8txplN3+gZo2TuWqXBHxNxrDwIqUI6Mv0li21754/xuofOhXecpa4hLHhZhUEV1HwSnkEsHJfOC4xVFTeW47sGVDzCM5rUlFnqvR7dP2mV4tGsqv0CZZz1b+GSzXwyYqaCao+YRL03VMANVo7IJuughdVyKj88dkdjsenKAdTG6mp28/BVAM564fbrWCKySNTN/fUnSDI1wx4FaIEKCS9XsyfRB0edR16GgCP7maF9UoKc7mHXfXsqFrkjCdgDeEaki02fiz+D1qZsH79FcK7Uq3MyV/XM/xeWePE8SwZQg2Sn41s7cEn2IsooWWwSWGYGHc86j6lIc+/g75FnZpmc4BK8LnIns+AzqJe1FTOpD8EVFDJHcWiHezklzPviJko3vcaxHpLn8ZSdrRFAFcEMaGWf+ivk3IxT6YzN9E/uqTHBKLEOMyQK/AakDCTFaVXcmazQGPMAm/+c8nsl+DGYoVCes4INqFo0pjBHysu6mIT1IPbcQqixWaH+G0S6vRtj7jvem635+k1R66eawgAvLJyH7ugjnmTv/PxM658L2+njy7+i6coBU6kr8g+3IJ7zatGVD+ZoCm6/PxgB",
+    "text": "So BOOKING_STATUS_CATEGORY has: CANCELLED, FIRM, No Match, OFFER. \"Live\" bookings would be FIRM (and possibly OFFER depending on business definition). Let me use FIRM as \"live\" and exclude CANCELLED. Let me also check if there's a PARK_XID in the fact table.\n\nNow I need to build the comparison query. Latest snapshot is 2026-09-25. Same day last year would be 364 days earlier (to keep weekday) = 2025-09-26. Wait, let me think: 2026-09-25 is a Friday. 364 days earlier = 2025-09-26, which would also be a Friday. \n\nBoth dates are Fridays, so I can compare the 2027 season bookings as of 2026-09-25 against the 2026 season bookings as of 2025-09-26, then pull out the top 5 parks for each."
+   },
+   "type": "thinking"
+  },
+  {
+   "text": "Status categories are clear: `FIRM` = live bookings, `CANCELLED` = cancelled, `OFFER` = quotes/offers. I'll treat `FIRM` as live. The latest snapshot is **2026-09-25** (a Friday), so the year-ago comparator is **2025-09-26** (also a Friday, 364 days back).\n\nLet me run the headline comparison and top-5 parks in one go.",
+   "type": "text"
+  },
+  {
+   "tool_use": {
+    "classification": {
+     "reasons": [
+      "Read-only SQL"
+     ],
+     "risk_level": "RISK_LEVEL_NONE",
+     "sql": {
+      "statements": [
+       {
+        "category": "CATEGORY_READ_ONLY",
+        "statement": "WITH params AS (SELECT CAST('2026-09-25' AS DATE) AS snap_current, CAST('2025-09-26' AS DATE) AS snap_yago), live AS (SELECT f.SNAPSHOT_DATE, f.SEASON, f.PARK_XID, f.BOOKING_ID, f.TOTAL_ACCOMMODATION_VALUE FROM HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS AS f JOIN HAVEN_STORE.HOLIDAY.DIM_BOOKING_STATUS AS s ON f.BOOKING_STATUS_XID = s.BOOKING_STATUS_XID CROSS JOIN params AS p WHERE f.SNAPSHOT_DATE IN (p.snap_current, p.snap_yago) AND s.BOOKING_STATUS_CATEGORY = 'FIRM' AND ((f.SNAPSHOT_DATE = p.snap_current AND f.SEASON = 2027) OR (f.SNAPSHOT_DATE = p.snap_yago AND f.SEASON = 2026))), headline /* headline totals */ AS (SELECT SEASON, SNAPSHOT_DATE, COUNT(*) AS live_bookings, SUM(TOTAL_ACCOMMODATION_VALUE) AS total_accomm_value FROM live GROUP BY 1, 2), park_ranked /* top 5 parks for current season */ AS (SELECT pk.PARK_NAME, COUNT(*) AS live_bookings, SUM(l.TOTAL_ACCOMMODATION_VALUE) AS total_accomm_value, ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) AS rn FROM live AS l JOIN HAVEN_STORE.COMMON.DIM_PARK AS pk ON l.PARK_XID = pk.PARK_XID WHERE l.SEASON = 2027 GROUP BY 1) SELECT 'HEADLINE' AS section, CAST(SEASON AS VARCHAR) AS label, CAST(SNAPSHOT_DATE AS VARCHAR) AS snapshot, live_bookings, total_accomm_value FROM headline UNION ALL SELECT 'TOP5_PARK', PARK_NAME, NULL, live_bookings, total_accomm_value FROM park_ranked WHERE rn <= 5 ORDER BY section, label",
+        "statement_type": "STATEMENT_TYPE_SELECT",
+        "target_role": "",
+        "write_database_name": "",
+        "write_schema_name": ""
+       }
+      ]
+     }
+    },
+    "client_side_execute": false,
+    "input": {
+     "description": "Live bookings 2027 season vs 2026 season YoY, plus top 5 parks",
+     "sql": "\nWITH params AS (\n  SELECT\n    '2026-09-25'::DATE AS snap_current,\n    '2025-09-26'::DATE AS snap_yago\n),\nlive AS (\n  SELECT\n    f.SNAPSHOT_DATE,\n    f.SEASON,\n    f.PARK_XID,\n    f.BOOKING_ID,\n    f.TOTAL_ACCOMMODATION_VALUE\n  FROM HAVEN_STORE.HOLIDAY.FCT_HOLIDAY_BOOKINGS f\n  JOIN HAVEN_STORE.HOLIDAY.DIM_BOOKING_STATUS s\n    ON f.BOOKING_STATUS_XID = s.BOOKING_STATUS_XID\n  CROSS JOIN params p\n  WHERE f.SNAPSHOT_DATE IN (p.snap_current, p.snap_yago)\n    AND s.BOOKING_STATUS_CATEGORY = 'FIRM'\n    AND (  (f.SNAPSHOT_DATE = p.snap_current AND f.SEASON = 2027)\n        OR (f.SNAPSHOT_DATE = p.snap_yago   AND f.SEASON = 2026) )\n),\n\n-- headline totals\nheadline AS (\n  SELECT\n    SEASON,\n    SNAPSHOT_DATE,\n    COUNT(*)                          AS live_bookings,\n    SUM(TOTAL_ACCOMMODATION_VALUE)    AS total_accomm_value\n  FROM live\n  GROUP BY 1,2\n),\n\n-- top 5 parks for current season\npark_ranked AS (\n  SELECT\n    pk.PARK_NAME,\n    COUNT(*)                          AS live_bookings,\n    SUM(l.TOTAL_ACCOMMODATION_VALUE)  AS total_accomm_value,\n    ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) AS rn\n  FROM live l\n  JOIN HAVEN_STORE.COMMON.DIM_PARK pk ON l.PARK_XID = pk.PARK_XID\n  WHERE l.SEASON = 2027\n  GROUP BY 1\n)\n\nSELECT 'HEADLINE' AS section, CAST(SEASON AS VARCHAR) AS label,\n       CAST(SNAPSHOT_DATE AS VARCHAR) AS snapshot, live_bookings, total_accomm_value\nFROM headline\n\nUNION ALL\n\nSELECT 'TOP5_PARK', PARK_NAME, NULL, live_bookings, total_accomm_value\nFROM park_ranked WHERE rn <= 5\n\nORDER BY section, label\n"
+    },
+    "name": "snowflake_sql_execute",
+    "tool_use_id": "toolu_bdrk_01KvxNcHQr7pPVVSuBvkHZWo",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "text": "7 row(s) returned.\n\nSECTION,LABEL,SNAPSHOT,LIVE_BOOKINGS,TOTAL_ACCOMM_VALUE\n\nHEADLINE,2026,2025-09-26,149174,72414635.33\nHEADLINE,2027,2026-09-25,137527,70601164.52\nTOP5_PARK,Craig Tara,None,5802,2783902.52\nTOP5_PARK,Devon Cliffs,None,8128,5694143.96\nTOP5_PARK,Hafan y Mor,None,7383,4805465.47\nTOP5_PARK,Perran Sands,None,5272,4362637.55\nTOP5_PARK,Primrose Valley,None,7175,3860919.16",
+      "type": "text"
+     }
+    ],
+    "name": "snowflake_sql_execute",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_01KvxNcHQr7pPVVSuBvkHZWo",
+    "type": "snowflake_sql_execute"
+   },
+   "type": "tool_result"
+  },
+  {
+   "text": "Here are the results.\n\n## Live (FIRM) bookings \u2014 latest snapshot\n\n| Season | Snapshot | Live bookings | Accommodation value (\u00a3) |\n|--------|----------|---------------|------------------------|\n| **2027** | 2026-09-25 | **137,527** | **\u00a370.6 m** |\n| **2026** | 2025-09-26 | **149,174** | **\u00a372.4 m** |\n| **Variance** | | **\u221211,647 (\u22127.8%)** | **\u2212\u00a31.8 m (\u22122.5%)** |\n\nSeason 2027 is tracking **7.8% behind** 2026 on volume at the equivalent point, though the value gap is narrower at \u22122.5%, suggesting a higher average booking value this year.\n\n## Top 5 parks \u2014 2027 season (by volume)\n\n| Rank | Park | Live bookings | Accommodation value (\u00a3) |\n|------|------|---------------|------------------------|\n| 1 | Devon Cliffs | 8,128 | \u00a35.69 m |\n| 2 | Hafan y Mor | 7,383 | \u00a34.81 m |\n| 3 | Primrose Valley | 7,175 | \u00a33.86 m |\n| 4 | Craig Tara | 5,802 | \u00a32.78 m |\n| 5 | Perran Sands | 5,272 | \u00a34.36 m |\n\n**Notes:**\n- \"Live\" = `BOOKING_STATUS_CATEGORY = 'FIRM'` (statuses: Booked, Closed, Terminated).\n- Value column used: `TOTAL_ACCOMMODATION_VALUE`.\n- YoY comparison uses Friday-to-Friday alignment (364-day gap).\n\nLet me save the key findings for future use.",
+   "type": "text"
+  },
+  {
+   "tool_use": {
+    "client_side_execute": false,
+    "input": {
+     "request": "RECORD bookings: DIM_PARK join and top parks: DIM_PARK joins to FCT_HOLIDAY_BOOKINGS on PARK_XID. Largest holiday parks by 2027 live bookings (as at 2026-09-25): Devon Cliffs (8,128), Hafan y Mor (7,383), Primrose Valley (7,175), Craig Tara (5,802), Perran Sands (5,272). (from BOOKINGS_AGENT)"
+    },
+    "name": "ask_knowledge_assistant",
+    "tool_use_id": "toolu_bdrk_01PvTaLzFVeqLkLZkqfRsdFf",
+    "type": "generic"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_use": {
+    "client_side_execute": false,
+    "input": {
+     "request": "RECORD bookings: booking status categories: DIM_BOOKING_STATUS.BOOKING_STATUS_CATEGORY has three meaningful values \u2014 FIRM (live bookings: Booked, Closed, Terminated), CANCELLED (Canceled, Canceled&Terminated), OFFER (Offer, Quote, Shopping, Waitlist), plus 'No Match'. Join to fact on BOOKING_STATUS_XID. (from BOOKINGS_AGENT)"
+    },
+    "name": "ask_knowledge_assistant",
+    "tool_use_id": "toolu_bdrk_013oRh6Ratf5BkXBix5Uovbb",
+    "type": "generic"
+   },
+   "type": "tool_use"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "json": {
+       "execution_type": "procedure",
+       "query_id": "01c75053-030c-6ae6-00aa-9901ed94466f",
+       "result": "{\"agent\": \"HAVEN_DATA_SCIENCE_DEV.PETERZENTAI_LOCAL.KNOWLEDGE_AGENT\", \"answer\": \"STORED 2c3ea62a\\n\\nNote: \\\"DIM_BOOKING_STATUS.BOOKING_STATUS_CATEGORY groups raw statuses into: FIRM = live bookings (Booked, Closed, Terminated); CANCELLED (Canceled, Canceled&Terminated); OFFER (Offer, Quote, Shopping, Waitlist); plus a residual 'No Match'. Join the dimension to the booking fact on BOOKING_STATUS_XID. Example: fact f JOIN DIM_BOOKING_STATUS d ON f.BOOKING_STATUS_XID = d.BOOKING_STATUS_XID; filter live bookings with d.BOOKING_STATUS_CATEGORY = 'FIRM'.\\\"\", \"tools_used\": [\"recall_observations\", \"remember_observation\"], \"elapsed_s\": 24.6}",
+       "truncated": false
+      },
+      "type": "json"
+     }
+    ],
+    "name": "ask_knowledge_assistant",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_013oRh6Ratf5BkXBix5Uovbb",
+    "type": "generic"
+   },
+   "type": "tool_result"
+  },
+  {
+   "tool_result": {
+    "content": [
+     {
+      "json": {
+       "execution_type": "procedure",
+       "query_id": "01c75053-030c-6701-00aa-9901ed945173",
+       "result": "{\"agent\": \"HAVEN_DATA_SCIENCE_DEV.PETERZENTAI_LOCAL.KNOWLEDGE_AGENT\", \"answer\": \"STORED 8b88ac0f\\n\\nFinal note: DIM_PARK joins to FCT_HOLIDAY_BOOKINGS on PARK_XID (DIM_PARK.PARK_XID = FCT_HOLIDAY_BOOKINGS.PARK_XID). Top 5 holiday parks by 2027 live booking count, measured as at 2026-09-25: Devon Cliffs 8,128; Hafan y Mor 7,383; Primrose Valley 7,175; Craig Tara 5,802; Perran Sands 5,272. Pattern: SELECT p.PARK_NAME, COUNT(*) FROM FCT_HOLIDAY_BOOKINGS b JOIN DIM_PARK p ON b.PARK_XID = p.PARK_XID WHERE holiday_year = 2027 AND status = live GROUP BY 1 ORDER BY 2 DESC.\", \"tools_used\": [\"recall_observations\", \"recall_observations\", \"remember_observation\"], \"elapsed_s\": 22.4}",
+       "truncated": false
+      },
+      "type": "json"
+     }
+    ],
+    "name": "ask_knowledge_assistant",
+    "status": "success",
+    "tool_use_id": "toolu_bdrk_01PvTaLzFVeqLkLZkqfRsdFf",
+    "type": "generic"
+   },
+   "type": "tool_result"
+  },
+  {
+   "text": "Findings saved for future questions. Let me know if you'd like to drill into any park, break out by channel, or look at the pace trend over recent weeks.",
+   "type": "text"
+  }
+ ],
+ "metadata": {
+  "assistant_message_id": 187574107714586,
+  "run_id": "2862161101-187574107707422",
+  "thread_id": 2862161101,
+  "usage": {
+   "tokens_consumed": [
+    {
+     "context_window": 1000000,
+     "input_tokens": {
+      "cache_read": 235117,
+      "cache_write": 50351,
+      "total": 285476,
+      "uncached": 8
+     },
+     "model_name": "claude-opus-4-6",
+     "model_role": "orchestration",
+     "output_tokens": {
+      "total": 2484
+     }
+    }
+   ]
+  },
+  "user_message_id": 187574107707422
+ },
+ "role": "assistant",
+ "schema_version": "v2",
+ "sequence_number": 374,
+ "status": "completed"
+}

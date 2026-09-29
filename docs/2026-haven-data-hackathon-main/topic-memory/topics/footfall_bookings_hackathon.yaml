@@ -1,0 +1,19 @@
+# Hackathon deployment of the footfall & bookings findings memory: same brief, rules and organiser as
+# footfall_bookings.yaml (extended below), in its own schema, owned by NEXUS_SPIKE.
+# Deploy:  .venv/bin/python topic-memory/memctl.py deploy topics/footfall_bookings_hackathon.yaml
+extends: footfall_bookings.yaml
+
+topic:
+  id_prefix: FBH            # FBH-00001...: distinct from the dev deployment's FBF-... ids
+
+deployment:
+  database: NEXUS_HACKATHON_DB
+  schema: FOOTFALL_MEMORY
+  warehouse: NEXUS_HACKATHON_WH
+  role: NEXUS_SPIKE          # deploys and owns everything; the tools run with its rights
+  create_schema: true
+  client_name: mem-footfall-hackathon
+  client_role: NEXUS_SPIKE   # role of the MCP session (SF_ROLE for the proxy)
+  read_only_server: true
+  log_reads: true
+  usage_roles: []            # add participant roles here to grant USAGE on the MCP servers + tool procedures
