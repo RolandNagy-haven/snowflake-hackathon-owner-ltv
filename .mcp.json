@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "mem-owner-ltv": {
+      "type": "stdio",
+      "command": "/usr/local/bin/python3",
+      "args": [
+        "/Users/nagyroland/Library/Mobile Documents/com~apple~CloudDocs/Haven/work/hackathon-snowflake-2026-sept/git/snowflake-hackathon-owner-ltv/docs/2026-haven-data-hackathon-main/mcp_auth/sf_mcp_proxy.py",
+        "https://bd78472.eu-west-1.snowflakecomputing.com/api/v2/databases/NEXUS_HACKATHON_DB/schemas/SHARED_OWNER_VIEW_MEMORY_OWNER_LTV/mcp-servers/SHARED_OWNER_VIEW_MEMORY_MCP"
+      ],
+      "env": {
+        "SF_ACCOUNT": "bd78472.eu-west-1",
+        "SF_USER": "roland.nagy@haven.com",
+        "SF_ROLE": "NEXUS_SPIKE"
+      }
+    }
+  }
+}
