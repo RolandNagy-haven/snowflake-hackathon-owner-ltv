@@ -32,6 +32,7 @@ can finally answer: **"Which acquisition routes produce the owners worth having?
 | 10 | [Churn-model repo](10-churn-model-repo.md) | Joe's `service-haven-data-ownerchurn` — risk-score definitions, `OWNER_RISK_SCORES`, and Joe's static LTV view |
 | 11 | [Tooling & build method](11-tooling-and-build-method.md) | Peter's deck — semantic views, Cortex Agents, MCP, and the 5-step Claude Code build flow |
 | 12 | [Reference implementation](12-reference-implementation.md) | Peter's working repo (`2026-haven-data-hackathon-main`) — code patterns, agent orchestration, the knowledge agent, the shared-owner-view topics |
+| 13 | [Definitions meeting](13-definitions-meeting.md) | Whiteboard transcript — owner lifecycle statuses, routes into ownership, lead vs prospect, Amplitude/consent caveats, owner-spend tracking |
 
 ## The single most important hour
 

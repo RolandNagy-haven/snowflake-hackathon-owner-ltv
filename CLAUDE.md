@@ -60,6 +60,25 @@ Reference query (has the join path, grain, and caveats already):
 Key tables live in `knowledge-base/05-owner-ltv-playbook.md`; churn-model detail in
 `knowledge-base/10-churn-model-repo.md`.
 
+## Owner definition — business context (from the definitions meeting)
+
+Non-schema domain context from the whiteboard session
+(`knowledge-base/13-definitions-meeting.md`). Feeds the 09:45 owner-definition decision and the
+semantic-view descriptions — verify anything encoded against the actual tables first.
+
+- **Owner = holds one or more caravans.** "Complete" = keys + paid, but an account can be an
+  owner on **pitch status alone**. Lifecycle edges are ambiguous (mid-leave = still an owner?) —
+  decide and label. Statuses named: **OW** (main), **registered to private sale**, **part
+  exchange (PX)**, **transfer of ownership** — verify codes against `DIM_PITCH_STATUS`.
+- **Routes into ownership:** Haven marketing, bring-your-own-van (PDR / knock-on-door), **NPX**
+  (new-customer park exchange), **NTO** (new-customer take on), **private sale** (Haven first
+  dibs), **Tora** (confirm). Route matters for the demo question.
+- **Owner spend is a partial measure.** Tracked via owner cards / digital pass; F&B reliable,
+  some-park retail captures no identity, private-let use unknown, **friends & family cards** add
+  accounts under one owner, owner-event attendance largely untracked. State the gaps.
+- **Lead vs prospect is undefined** (ToF's call). **Digital/Amplitude data is never complete** —
+  ad-blocking + **GDPR consent (~80%)** mean it won't reconcile line-for-line; say so.
+
 ## Conventions
 
 - Correctness over speed: agents that write their own SQL can miscount (e.g. skipping empty

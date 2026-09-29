@@ -50,6 +50,17 @@ DESCRIBE SEMANTIC VIEW NEXUS_PLATINUM.EPOS_SALES.SEM_EPOS_SALES;
 
 **An agent that doesn't know these answers confidently and wrongly.**
 
+## Spend & digital-data caveats (definitions meeting, [13](13-definitions-meeting.md))
+
+- **Owner-card spend is partial.** F&B is reliable; **retail on a few parks captures no identity
+  on scan**; **private-let** card use is unknown. **Friends & family cards** attach spend to
+  extra accounts under one owner. Don't present card spend as total owner spend.
+- **Owner events attendance is largely untracked**; owner-lounge spend is in retail/OE reports.
+- **Digital/Amplitude data is never complete** — ad-blocking (unknown loss) + **GDPR consent
+  (~80%)** mean it won't reconcile line-for-line. Say so.
+- **Pitch-status codes for the owner lifecycle** (OW, private sale, PX, transfer of ownership)
+  were named verbally — **verify against `DIM_PITCH_STATUS`** before encoding them.
+
 ## Process traps
 
 - **Don't model twenty tables.** Agree 4–6.

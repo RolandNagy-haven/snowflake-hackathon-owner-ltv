@@ -45,6 +45,21 @@ in the semantic view's **description and instructions** — that's exactly what 
 - `HAVEN_STORE.COMMON.DIM_PARK` — park name + `PITCH_STRATEGY_GROUP` (park tier).
 - `HAVEN_STORE.CARAVANS.ACCOUNT_DETAIL` — the **join key to identity** (`HAVEN_ID`); the domain
   anchor for the shared spine.
+- `HAVEN_STORE.CUSTOMER.CLUSTER_SOCIO_ECONOMIC_HISTORY` — **Mosaic socio-economic data**
+  (postcode-based demographic segmentation) per owner. Adds a *who the owner is* dimension for
+  LTV — lets us segment value/tenure by socio-economic cluster, which sharpens "which acquisition
+  routes produce the owners worth having". ⚠️ **`DESCRIBE` before use:** confirm (a) the join key
+  to the owner — `HAVEN_ID` vs `ACCOUNT_NO`; (b) it's a `*_history` table, so likely has a
+  snapshot/month grain — **filter to the latest snapshot** (as with `FCT_ACCOUNT_HISTORY` and
+  `OWNER_STATUS_TIME_SERIES_ANALYSIS`) or it fans out and double-counts; (c) Mosaic classes are
+  **categorical** — expose them as dimensions/synonyms in the semantic view, not as a metric.
+- `HAVEN_BASE.IDENTITY.HID_TO_PLOT_OWNER` — bridges **`PLOT_OWNER_ID` → `HAVEN_ID`**, so it's a
+  route onto the shared spine for any owner source keyed on plot owner (e.g. the socio-economic
+  history above, if `DESCRIBE` shows it's plot-owner-keyed). **Owner-scoped (~33,559 rows), which
+  is a feature here** — it covers owners, not the whole 6.4M-HID population. ⚠️ **Critical trap:**
+  its `PLOT_OWNER_ID` is `NUMBER`; **do not** join it to `DIM_TOP_OF_THE_FUNNEL.PLOT_OWNER_XID`,
+  which is an **MD5 hash (`TEXT`)** — the join errors. Match numeric to numeric only. See
+  [04](04-owner-definition-and-joins.md) and [08](08-traps-and-gotchas.md).
 
 ⚠️ **Agree 4–6 tables, not twenty.** Semantic views get hard fast and you have one day.
 
@@ -89,6 +104,22 @@ clear need (see the email/PII argument in [04](04-owner-definition-and-joins.md)
   Historic-churn questions are a genuine limitation, not something to paper over.
 - **Many-to-many.** Pre-aggregate `ACCOUNT_DETAIL` to `DISTINCT HAVEN_ID` before declaring any
   cross-domain relationship, or the semantic view rejects it / double-counts.
+
+## Owner spend — how it's tracked, and where it leaks (definitions meeting)
+
+Relevant to the value side of LTV. Detail in [13](13-definitions-meeting.md):
+
+- On-park spend is tracked via **owner cards** (now a **digital pass**, 20% discount). ⚠️
+  **Friends and family also get owner cards** tied to an account number — spend spreads across
+  accounts under one owner, reinforcing the aggregate-to-person caution above.
+- **F&B** card spend is reliable; **retail** is not fully — a few parks run a different EPOS that
+  captures **no identity on scan**, so that spend is invisible.
+- **Private lets** used the owner card (Haven tried to stop it) — usage now **unknown**.
+- **Owner lounges** surface in retail/OE transaction reports (retail team has analysed these);
+  **owner events** attendance is **largely untracked** — a data gap, not a measurable value yet.
+
+**Implication:** any "owner spend" LTV component is a **partial measure**. State the coverage
+gaps rather than presenting card spend as total spend.
 
 ## The questions we own (from Rachel Gregory)
 

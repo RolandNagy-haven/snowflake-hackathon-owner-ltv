@@ -25,6 +25,15 @@ front end.
   address, not Haven ID.** Net-new vs returning leads can't currently be separated, which
   **inflates the CPA denominator.** (Appendix A of the LTV spec.)
 
+**Business context (definitions meeting, [13](13-definitions-meeting.md)):**
+- **"Lead" vs "prospect" has no agreed definition** — used interchangeably by some. Pin it down
+  before "what is an owner" is fully answered.
+- **One inquirer → many deals → each deal a different source** — source is per-deal, not
+  per-person.
+- Channels: **park leads** (walk into the show ground, served by **HHAs / Holiday Home
+  Advisors**, attributed to the park) vs **pre-booked** (web/partner/CRM/email forms, where
+  performance-marketing traffic lands) vs **organic** walk-ups with uncaptured prior activity.
+
 **Pre-reading:** `core-dbt#1426` and `#1427` (gold fact + dimension models).
 
 **Questions owned (Caravan Sales — funnel efficiency):**
@@ -56,6 +65,12 @@ resolves five id types onto `HAVEN_ID`, **99.97%** owner coverage.
 - Beware wrong-table low-match-rate: `FCT_ATTRIBUTION_JOURNEY_SUMMARY` is keyed on
   `HOLIDAY_BOOKING_REF` (holidaymaker attribution) — for owner joins, go via the Bloomreach
   identity bridge (see [04](04-owner-definition-and-joins.md)).
+
+**Business context (definitions meeting, [13](13-definitions-meeting.md)):** marketing leans on
+**Amplitude** (Amplitude ID) — pre-login, a person may be known only by device/Amplitude ID,
+merged to identity later. **Digital data is never 100%:** ad-blocking blocks tracking (loss
+unknown, ~10%?), and **GDPR consent** (~80% rates) means declined users leave no data. **Digital
+figures won't reconcile line-for-line** — state it (the divergence problem, [09](09-benchmark-and-divergence.md)).
 
 **Pre-reading:** `haven_data_artefacts/Performance_marketing/Attribution model for Haven
 Holidays.docx`, `product_scratchpad/Attribution/`.

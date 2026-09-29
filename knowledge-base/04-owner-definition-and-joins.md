@@ -148,7 +148,27 @@ upgrades). The Bloomreach identity bridge gave **99.97%**.
   `FCT_ATTRIBUTION_CARAVAN_SALES_PATH_TO_WEB_ENQUIRY` has 10,045,889. A team could model an
   empty table all morning.
 - **`HAVEN_BASE.IDENTITY.HID_TO_PLOT_OWNER` has only 33,559 rows** against 6.4M HIDs. It maps
-  owners, not everyone — do not use it as a general identity table.
+  owners, not everyone — do not use it as a *general* identity table. **But for Owner LTV that
+  owner-scoped `PLOT_OWNER_ID` → `HAVEN_ID` mapping is exactly the right bridge** to reach the
+  spine from any plot-owner-keyed source (see [05](05-owner-ltv-playbook.md)). Just remember its
+  `PLOT_OWNER_ID` is `NUMBER` — never join it to the MD5-hash `PLOT_OWNER_XID` (`TEXT`) above.
+
+## Owner lifecycle & routes in (from the definitions meeting)
+
+The join work above answers *how to link an owner across domains*; the definitions whiteboard
+([13](13-definitions-meeting.md)) answers *what counts as an owner in the first place* — the
+other half of the 09:45 decision.
+
+- **"Complete" = keys in hand + paid**, but an account can be an owner on **pitch status alone**.
+  Pitch status marks lifecycle stage; the **edges are ambiguous** (someone mid-leave is arguably
+  still an owner) → decide and label the boundary.
+- Statuses named: **OW** (main owner status), **registered to private sale** (leaving that
+  route), **part exchange (PX)**, **transfer of ownership**. ⚠️ Verify exact codes against
+  `DIM_PITCH_STATUS` before encoding.
+- **Routes into ownership** are not just "Haven sells a van": Haven means (marketing), bring your
+  own van (PDR / knock-on-door), **NPX** (new-customer park exchange), **NTO** (new-customer take
+  on), **private sale** (Haven has first dibs), and **Tora** (confirm). Route matters for the
+  demo question and for the untested HID-coverage-by-channel worry below.
 
 ## What to agree at 09:45 (Donovan's proposals for the room)
 
